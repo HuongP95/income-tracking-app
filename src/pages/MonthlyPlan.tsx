@@ -2,19 +2,36 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User } from 'firebase/auth';
 import { db } from '../firebase';
 import { ref, onValue, set } from 'firebase/database';
-import { subscribeToTransactions, updateSettlementDay, subscribeToCategories } from '../lib/db';
-import { Transaction, Category } from '../types';
+import { subscribeToTransactions, updateSettlementDay, subscribeToCategories, updateSettlementConfig, addCustomCycle, updateCustomCycle, deleteCustomCycle, addTransaction } from '../lib/db';
+import { Transaction, Category, CustomCycle } from '../types';
 import { isWithinInterval, format } from 'date-fns';
-import { Target, TrendingDown, TrendingUp, AlertTriangle, CheckCircle, Info, RefreshCw, Calendar } from 'lucide-react';
-import { formatCurrency, formatNumberInput, parseNumberInput, getSettlementPeriod } from '../lib/utils';
+import { Target, TrendingDown, TrendingUp, AlertTriangle, CheckCircle, Info, RefreshCw, Calendar, Trash2, Plus, Sparkles } from 'lucide-react';
+import { formatCurrency, formatNumberInput, parseNumberInput, getSettlementPeriod, getCurrentPeriod } from '../lib/utils';
 
-export default function MonthlyPlan({ user, settlementDay }: { user: User, settlementDay: number }) {
+export default function MonthlyPlan({ 
+  user, 
+  settlementDay,
+  settlementConfig = { settlement_day: 1, mode: 'fixed' },
+  customCycles = []
+}: { 
+  user: User, 
+  settlementDay: number,
+  settlementConfig?: { settlement_day: number; mode: 'fixed' | 'flexible' },
+  customCycles?: CustomCycle[]
+}) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [plannedIncome, setPlannedIncome] = useState('15,000,000');
   const [plannedExpense, setPlannedExpense] = useState('10,000,000');
   const [categories, setCategories] = useState<Category[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+
+  // Custom cycles form state
+  const [showCycleForm, setShowCycleForm] = useState(false);
+  const [cycleStartDate, setCycleStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [cycleSalaryAmount, setCycleSalaryAmount] = useState('');
+  const [cycleNote, setCycleNote] = useState('');
+  const [autoAddSalaryTx, setAutoAddSalaryTx] = useState(true);
 
   // Subscribe to monthly plan values from database
   useEffect(() => {
@@ -49,8 +66,8 @@ export default function MonthlyPlan({ user, settlementDay }: { user: User, settl
   }, [categories]);
 
   const period = useMemo(() => {
-    return getSettlementPeriod(settlementDay);
-  }, [settlementDay]);
+    return getCurrentPeriod(settlementConfig, customCycles);
+  }, [settlementConfig, customCycles]);
 
   // Compute actual income and expense for the current cycle
   const actualStats = useMemo(() => {
@@ -118,6 +135,71 @@ export default function MonthlyPlan({ user, settlementDay }: { user: User, settl
       console.error(err);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleCreateCycle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const startTime = new Date(cycleStartDate).getTime();
+    const salary = parseNumberInput(cycleSalaryAmount);
+
+    // 1. Add the new cycle
+    const addedCycle = await addCustomCycle(user.uid, {
+      start_date: startTime,
+      name: cycleNote || `Chu kỳ từ ${format(new Date(startTime), 'dd/MM/yyyy')}`,
+      salary_amount: salary,
+      note: cycleNote
+    });
+
+    // 2. Adjust end_dates for all previous cycles
+    const updatedSim = [...customCycles, { ...addedCycle, id: addedCycle.id }].sort((a, b) => a.start_date - b.start_date);
+    for (let i = 0; i < updatedSim.length - 1; i++) {
+      const current = updatedSim[i];
+      const next = updatedSim[i + 1];
+      const newEnd = next.start_date - 1;
+      if (current.id && current.end_date !== newEnd) {
+        await updateCustomCycle(user.uid, current.id, { end_date: newEnd });
+      }
+    }
+
+    // 3. Auto-add salary transaction if checked
+    if (autoAddSalaryTx && salary > 0) {
+      // Find or create 'Lương' category or first income category
+      let salaryCat = categories.find(c => c.type === 'income' && (c.name.toLowerCase().includes('lương') || c.name.toLowerCase().includes('salary')));
+      if (!salaryCat) {
+        salaryCat = categories.find(c => c.type === 'income');
+      }
+      const catId = salaryCat?.id || 'income_default';
+      
+      await addTransaction(user.uid, {
+        amount: salary,
+        type: 'income',
+        category_id: catId,
+        date: startTime,
+        note: cycleNote ? `Lương nhận đầu chu kỳ: ${cycleNote}` : 'Lương đầu chu kỳ'
+      });
+    }
+
+    // Reset form
+    setShowCycleForm(false);
+    setCycleSalaryAmount('');
+    setCycleNote('');
+    setCycleStartDate(format(new Date(), 'yyyy-MM-dd'));
+  };
+
+  const handleDeleteCycle = async (cycleId: string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa chu kỳ này không? Việc này có thể làm thay đổi cách nhóm các giao dịch.')) return;
+    await deleteCustomCycle(user.uid, cycleId);
+    
+    // After deletion, re-align end dates of remaining cycles
+    const remaining = customCycles.filter(c => c.id !== cycleId).sort((a, b) => a.start_date - b.start_date);
+    for (let i = 0; i < remaining.length; i++) {
+      const current = remaining[i];
+      const next = remaining[i + 1];
+      const newEnd = next ? next.start_date - 1 : undefined;
+      if (current.id && current.end_date !== newEnd) {
+        await updateCustomCycle(user.uid, current.id, { end_date: newEnd });
+      }
     }
   };
 
@@ -189,45 +271,223 @@ export default function MonthlyPlan({ user, settlementDay }: { user: User, settl
           </div>
 
           {/* Settlement Cycle Settings */}
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-fit">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
-              <RefreshCw className="w-5 h-5 text-indigo-600" />
-              Chu kỳ quyết toán
-            </h3>
-            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-              Nhập ngày chốt giao dịch hàng tháng của bạn (ví dụ ngày lãnh lương). Số liệu các mục Kế hoạch, Báo cáo, Ngân sách và Chia tiền sẽ tính toán theo chu kỳ này.
-            </p>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-fit space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 text-indigo-600" />
+                Chu kỳ quyết toán
+              </h3>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Thiết lập khoảng thời gian tính toán các báo cáo thu chi, ngân sách và kế hoạch tài chính.
+              </p>
+            </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">
-                  Ngày quyết toán hàng tháng
-                </label>
-                <select
-                  value={settlementDay}
-                  onChange={async (e) => {
-                    const day = Number(e.target.value);
-                    await updateSettlementDay(user.uid, day);
-                  }}
-                  className="block w-full rounded-lg border-0 py-2.5 px-3 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 font-semibold"
-                >
-                  {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                    <option key={day} value={day}>
-                      Ngày {day} hàng tháng
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {/* Mode Selector Tabs */}
+            <div className="grid grid-cols-2 gap-1 p-1 bg-gray-50 rounded-xl">
+              <button
+                type="button"
+                onClick={async () => {
+                  await updateSettlementConfig(user.uid, { mode: 'fixed' });
+                }}
+                className={`py-2 text-xs font-bold rounded-lg transition-all ${
+                  settlementConfig.mode === 'fixed'
+                    ? 'bg-white text-indigo-700 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                Cố định hàng tháng
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await updateSettlementConfig(user.uid, { mode: 'flexible' });
+                }}
+                className={`py-2 text-xs font-bold rounded-lg transition-all ${
+                  settlementConfig.mode === 'flexible'
+                    ? 'bg-white text-indigo-700 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                Linh hoạt theo lương
+              </button>
+            </div>
 
-              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3.5 text-xs text-indigo-950 space-y-1">
-                <p className="font-bold text-indigo-900 flex items-center gap-1">
-                  <Calendar className="w-4 h-4 text-indigo-600" />
-                  Chu kỳ hiện tại của bạn:
-                </p>
-                <p className="font-semibold font-mono pl-5">
-                  {format(period.start, 'dd/MM/yyyy')} - {format(period.end, 'dd/MM/yyyy')}
-                </p>
+            {settlementConfig.mode === 'fixed' ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">
+                    Ngày quyết toán hàng tháng
+                  </label>
+                  <select
+                    value={settlementDay}
+                    onChange={async (e) => {
+                      const day = Number(e.target.value);
+                      await updateSettlementConfig(user.uid, { settlement_day: day, mode: 'fixed' });
+                    }}
+                    className="block w-full rounded-lg border-0 py-2.5 px-3 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 font-semibold text-sm"
+                  >
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                      <option key={day} value={day}>
+                        Ngày {day} hàng tháng
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-gray-400 mt-1 leading-normal">
+                    Chu kỳ tự động xoay vòng cố định vào ngày này mỗi tháng.
+                  </p>
+                </div>
               </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Active Cycle Quick Stats */}
+                {customCycles.length > 0 ? (
+                  <div className="p-3.5 bg-indigo-50/50 border border-indigo-100/60 rounded-xl text-xs space-y-1.5">
+                    <p className="font-bold text-indigo-900 flex items-center gap-1">
+                      <Sparkles className="w-4 h-4 text-indigo-600" />
+                      Chu kỳ lương hiện tại:
+                    </p>
+                    <div className="pl-5 space-y-1 text-indigo-950">
+                      <p className="font-medium">🏷️ Tên: <span className="font-bold">{period.cycleName}</span></p>
+                      {period.salaryAmount !== undefined && period.salaryAmount > 0 && (
+                        <p className="font-medium">💰 Lương đã nhận: <span className="font-bold text-emerald-600 font-mono">{formatCurrency(period.salaryAmount)}</span></p>
+                      )}
+                      <p className="font-medium">📅 Bắt đầu: <span className="font-semibold font-mono">{format(period.start, 'dd/MM/yyyy')}</span></p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-900 leading-normal">
+                    💡 Bạn chưa tạo chu kỳ linh hoạt nào. Hãy bấm nút dưới đây để khai báo ngày nhận lương và bắt đầu chu kỳ đầu tiên!
+                  </div>
+                )}
+
+                {/* Form to Create Custom Cycle */}
+                {showCycleForm ? (
+                  <form onSubmit={handleCreateCycle} className="p-4 bg-gray-50 border border-gray-100 rounded-xl space-y-3 text-left">
+                    <p className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Nhận lương & Mở chu kỳ mới</p>
+                    
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Ngày bắt đầu nhận lương</label>
+                      <input
+                        type="date"
+                        required
+                        value={cycleStartDate}
+                        onChange={e => setCycleStartDate(e.target.value)}
+                        className="block w-full rounded-lg border-gray-300 text-xs py-1.5 px-2.5 focus:border-indigo-500 focus:ring-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Số tiền lương (VND)</label>
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: 15,000,000"
+                        value={cycleSalaryAmount}
+                        onChange={e => setCycleSalaryAmount(formatNumberInput(e.target.value))}
+                        className="block w-full rounded-lg border-gray-200 text-xs py-1.5 px-2.5 font-mono focus:border-indigo-500 focus:ring-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Ghi chú chu kỳ</label>
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: Lương tháng 7"
+                        value={cycleNote}
+                        onChange={e => setCycleNote(e.target.value)}
+                        className="block w-full rounded-lg border-gray-200 text-xs py-1.5 px-2.5 focus:border-indigo-500 focus:ring-indigo-500"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <input
+                        type="checkbox"
+                        id="autoAddSalaryTx"
+                        checked={autoAddSalaryTx}
+                        onChange={e => setAutoAddSalaryTx(e.target.checked)}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                      />
+                      <label htmlFor="autoAddSalaryTx" className="text-[10px] font-medium text-gray-600 select-none cursor-pointer">
+                        Tự động ghi nhận giao dịch thu nhập (Lương)
+                      </label>
+                    </div>
+
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowCycleForm(false)}
+                        className="flex-1 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        type="submit"
+                        className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs"
+                      >
+                        Bắt đầu
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCycleStartDate(format(new Date(), 'yyyy-MM-dd'));
+                      setShowCycleForm(true);
+                    }}
+                    className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-dashed border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4 text-indigo-600" />
+                    Đóng chu kỳ & Nhận lương mới
+                  </button>
+                )}
+
+                {/* History of Custom Cycles */}
+                {customCycles.length > 0 && (
+                  <div className="pt-2 text-left">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Lịch sử chu kỳ</p>
+                    <div className="max-h-[160px] overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50">
+                      {customCycles.map((cycle) => (
+                        <div key={cycle.id} className="p-2.5 flex justify-between items-center text-[11px] hover:bg-gray-50">
+                          <div className="space-y-0.5">
+                            <p className="font-bold text-gray-800">{cycle.name || cycle.note || "Chu kỳ"}</p>
+                            <p className="text-gray-500 font-mono">
+                              {format(new Date(cycle.start_date), 'dd/MM/yy')} 
+                              {cycle.end_date ? ` - ${format(new Date(cycle.end_date), 'dd/MM/yy')}` : " (Đang mở)"}
+                            </p>
+                            {cycle.salary_amount !== undefined && cycle.salary_amount > 0 && (
+                              <p className="text-emerald-600 font-semibold font-mono">+{formatCurrency(cycle.salary_amount)}</p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => cycle.id && handleDeleteCycle(cycle.id)}
+                            className="p-1.5 text-gray-400 hover:text-rose-600 rounded-md hover:bg-rose-50 transition-colors"
+                            title="Xóa chu kỳ"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Always visible active calculation range */}
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3.5 text-xs text-indigo-950 space-y-1 text-left">
+              <p className="font-bold text-indigo-900 flex items-center gap-1">
+                <Calendar className="w-4 h-4 text-indigo-600" />
+                Chu kỳ quyết toán hiện tại:
+              </p>
+              <p className="font-semibold font-mono pl-5 text-gray-900">
+                {format(period.start, 'dd/MM/yyyy')} - {format(period.end, 'dd/MM/yyyy')}
+              </p>
+              {settlementConfig.mode === 'flexible' && period.isCustom && (
+                <p className="text-[10px] text-indigo-800 font-medium pl-5 leading-normal">
+                  💡 Số liệu thu chi, ngân sách được tính toán theo chu kỳ lương này.
+                </p>
+              )}
             </div>
           </div>
         </div>

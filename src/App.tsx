@@ -15,13 +15,15 @@ import DebtTracker from './pages/DebtTracker';
 import MonthlyPlan from './pages/MonthlyPlan';
 import { LayoutDashboard, Receipt, PieChart, Wallet, CreditCard, LogOut, Target } from 'lucide-react';
 import { cn } from './lib/utils';
-import { subscribeToSettlementDay } from './lib/db';
+import { subscribeToSettlementConfig, subscribeToCustomCycles } from './lib/db';
+import { CustomCycle } from './types';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [settlementDay, setSettlementDay] = useState<number>(1);
+  const [settlementConfig, setSettlementConfig] = useState<{ settlement_day: number; mode: 'fixed' | 'flexible' }>({ settlement_day: 1, mode: 'fixed' });
+  const [customCycles, setCustomCycles] = useState<CustomCycle[]>([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -33,7 +35,12 @@ export default function App() {
 
   useEffect(() => {
     if (user) {
-      return subscribeToSettlementDay(user.uid, setSettlementDay);
+      const unsubConfig = subscribeToSettlementConfig(user.uid, setSettlementConfig);
+      const unsubCycles = subscribeToCustomCycles(user.uid, setCustomCycles);
+      return () => {
+        unsubConfig();
+        unsubCycles();
+      };
     }
   }, [user]);
 
@@ -115,10 +122,10 @@ export default function App() {
         <div className="p-4 md:p-8 max-w-7xl mx-auto w-full">
           {activeTab === 'dashboard' && <Dashboard user={user} />}
           {activeTab === 'history' && <History user={user} />}
-          {activeTab === 'plan' && <MonthlyPlan user={user} settlementDay={settlementDay} />}
-          {activeTab === 'reports' && <Reports user={user} settlementDay={settlementDay} />}
-          {activeTab === 'budget' && <Budget user={user} settlementDay={settlementDay} />}
-          {activeTab === 'debts' && <DebtTracker user={user} settlementDay={settlementDay} />}
+          {activeTab === 'plan' && <MonthlyPlan user={user} settlementDay={settlementConfig.settlement_day} settlementConfig={settlementConfig} customCycles={customCycles} />}
+          {activeTab === 'reports' && <Reports user={user} settlementDay={settlementConfig.settlement_day} settlementConfig={settlementConfig} customCycles={customCycles} />}
+          {activeTab === 'budget' && <Budget user={user} settlementDay={settlementConfig.settlement_day} settlementConfig={settlementConfig} customCycles={customCycles} />}
+          {activeTab === 'debts' && <DebtTracker user={user} settlementDay={settlementConfig.settlement_day} settlementConfig={settlementConfig} customCycles={customCycles} />}
         </div>
       </main>
     </div>

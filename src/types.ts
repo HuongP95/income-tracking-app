@@ -37,3 +37,13 @@ export interface DebtInstallment {
   start_date: number;
   type: 'debt' | 'loan' | 'installment';
 }
+
+export interface CustomCycle {
+  id?: string;
+  start_date: number;
+  end_date?: number;
+  salary_amount?: number;
+  note?: string;
+  name?: string;
+}
+

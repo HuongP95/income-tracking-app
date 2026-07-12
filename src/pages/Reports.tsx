@@ -1,13 +1,23 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { User } from 'firebase/auth';
 import { subscribeToTransactions, subscribeToCategories } from '../lib/db';
-import { Transaction, Category } from '../types';
+import { Transaction, Category, CustomCycle } from '../types';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { format, isWithinInterval } from 'date-fns';
-import { formatCurrency, getSettlementPeriod } from '../lib/utils';
+import { formatCurrency, getSettlementPeriod, getCurrentPeriod } from '../lib/utils';
 import { Calendar } from 'lucide-react';
 
-export default function Reports({ user, settlementDay }: { user: User, settlementDay: number }) {
+export default function Reports({ 
+  user, 
+  settlementDay,
+  settlementConfig = { settlement_day: 1, mode: 'fixed' },
+  customCycles = []
+}: { 
+  user: User, 
+  settlementDay: number,
+  settlementConfig?: { settlement_day: number; mode: 'fixed' | 'flexible' },
+  customCycles?: CustomCycle[]
+}) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -31,10 +41,10 @@ export default function Reports({ user, settlementDay }: { user: User, settlemen
   }, [categories]);
 
   const period = useMemo(() => {
-    // If user has selected a month, let's look at the cycle starting on settlementDay of that month.
+    // If user has selected a month, let's look at the cycle starting on settlementDay of that month or matching custom cycles.
     const dateWithSettlementDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), settlementDay);
-    return getSettlementPeriod(settlementDay, dateWithSettlementDay);
-  }, [settlementDay, currentMonth]);
+    return getCurrentPeriod(settlementConfig, customCycles, dateWithSettlementDay);
+  }, [settlementDay, settlementConfig, customCycles, currentMonth]);
 
   const monthTxs = useMemo(() => {
     const { start, end } = period;
@@ -192,7 +202,12 @@ export default function Reports({ user, settlementDay }: { user: User, settlemen
           {reportType === 'month' && (
             <div className="mt-1 flex items-center gap-1.5 text-xs text-indigo-600 font-semibold">
               <Calendar className="w-3.5 h-3.5" />
-              <span>Chu kỳ: {format(period.start, 'dd/MM/yyyy')} - {format(period.end, 'dd/MM/yyyy')} (Ngày quyết toán: {settlementDay})</span>
+              <span>
+                {period.isCustom 
+                  ? `Chu kỳ lương: ${period.cycleName || ''} (${format(period.start, 'dd/MM/yyyy')} - ${format(period.end, 'dd/MM/yyyy')})`
+                  : `Chu kỳ: ${format(period.start, 'dd/MM/yyyy')} - ${format(period.end, 'dd/MM/yyyy')} (Quyết toán: Ngày ${settlementDay} hàng tháng)`
+                }
+              </span>
             </div>
           )}
         </div>

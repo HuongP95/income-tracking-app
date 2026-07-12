@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { startOfDay, addMonths, subMonths } from 'date-fns';
+import { startOfDay, addMonths, subMonths, format } from 'date-fns';
+import { CustomCycle } from '../types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -48,4 +49,46 @@ export function getSettlementPeriod(settlementDay: number, date: Date = new Date
   }
 
   return { start, end };
+}
+
+export function getCurrentPeriod(
+  config: { settlement_day: number; mode: 'fixed' | 'flexible' },
+  customCycles: CustomCycle[],
+  referenceDate: Date = new Date()
+) {
+  if (config.mode === 'flexible' && customCycles.length > 0) {
+    const refTime = referenceDate.getTime();
+    const sorted = [...customCycles].sort((a, b) => b.start_date - a.start_date);
+    
+    // Find the cycle that contains referenceDate
+    let activeCycle = sorted.find(c => {
+      const start = c.start_date;
+      const end = c.end_date || Infinity;
+      return refTime >= start && refTime <= end;
+    });
+
+    if (!activeCycle) {
+      // Fallback to the latest/current cycle
+      activeCycle = sorted[0];
+    }
+
+    if (activeCycle) {
+      const start = startOfDay(new Date(activeCycle.start_date));
+      const end = activeCycle.end_date 
+        ? new Date(activeCycle.end_date)
+        : new Date(addMonths(start, 1).getTime() - 1); // fallback to 1 month later if not closed yet
+      return { 
+        start, 
+        end, 
+        isCustom: true, 
+        cycleId: activeCycle.id, 
+        cycleName: activeCycle.name || `Chu kỳ từ ${format(start, 'dd/MM')}`, 
+        salaryAmount: activeCycle.salary_amount 
+      };
+    }
+  }
+
+  // Fallback to standard monthly settlement day
+  const { start, end } = getSettlementPeriod(config.settlement_day, referenceDate);
+  return { start, end, isCustom: false };
 }

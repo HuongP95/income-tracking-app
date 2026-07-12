@@ -1,12 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User } from 'firebase/auth';
 import { subscribeToDebts, subscribeToTransactions, subscribeToCategories, addDebt, updateDebt, deleteDebt, addTransaction, updateTransaction, addCategory } from '../lib/db';
-import { DebtInstallment, Transaction, Category } from '../types';
+import { DebtInstallment, Transaction, Category, CustomCycle } from '../types';
 import { isWithinInterval, format } from 'date-fns';
 import { Users, CreditCard, Calendar, Wallet, ArrowUpRight, ArrowDownLeft, Info, Pencil, Trash2, X, Check } from 'lucide-react';
-import { formatCurrency, getSettlementPeriod, formatNumberInput, parseNumberInput } from '../lib/utils';
+import { formatCurrency, getSettlementPeriod, formatNumberInput, parseNumberInput, getCurrentPeriod } from '../lib/utils';
 
-export default function DebtTracker({ user, settlementDay }: { user: User, settlementDay: number }) {
+export default function DebtTracker({ 
+  user, 
+  settlementDay,
+  settlementConfig = { settlement_day: 1, mode: 'fixed' },
+  customCycles = []
+}: { 
+  user: User, 
+  settlementDay: number,
+  settlementConfig?: { settlement_day: number; mode: 'fixed' | 'flexible' },
+  customCycles?: CustomCycle[]
+}) {
   const [debts, setDebts] = useState<DebtInstallment[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -81,8 +91,8 @@ export default function DebtTracker({ user, settlementDay }: { user: User, settl
   };
 
   const period = useMemo(() => {
-    return getSettlementPeriod(settlementDay);
-  }, [settlementDay]);
+    return getCurrentPeriod(settlementConfig, customCycles);
+  }, [settlementConfig, customCycles]);
 
   const monthTxs = useMemo(() => {
     const { start, end } = period;

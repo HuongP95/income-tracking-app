@@ -1,12 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User } from 'firebase/auth';
 import { subscribeToTransactions, subscribeToCategories, subscribeToBudgets, setBudget } from '../lib/db';
-import { Transaction, Category, Budget as BudgetType } from '../types';
+import { Transaction, Category, Budget as BudgetType, CustomCycle } from '../types';
 import { isWithinInterval, format } from 'date-fns';
 import { Settings2, HelpCircle, CheckCircle, Info, Calendar } from 'lucide-react';
-import { formatCurrency, formatNumberInput, parseNumberInput, getSettlementPeriod } from '../lib/utils';
+import { formatCurrency, formatNumberInput, parseNumberInput, getSettlementPeriod, getCurrentPeriod } from '../lib/utils';
 
-export default function Budget({ user, settlementDay }: { user: User, settlementDay: number }) {
+export default function Budget({ 
+  user, 
+  settlementDay,
+  settlementConfig = { settlement_day: 1, mode: 'fixed' },
+  customCycles = []
+}: { 
+  user: User, 
+  settlementDay: number,
+  settlementConfig?: { settlement_day: number; mode: 'fixed' | 'flexible' },
+  customCycles?: CustomCycle[]
+}) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgets, setBudgets] = useState<BudgetType[]>([]);
@@ -25,8 +35,8 @@ export default function Budget({ user, settlementDay }: { user: User, settlement
   }, [user.uid]);
 
   const period = useMemo(() => {
-    return getSettlementPeriod(settlementDay);
-  }, [settlementDay]);
+    return getCurrentPeriod(settlementConfig, customCycles);
+  }, [settlementConfig, customCycles]);
 
   const monthTxs = useMemo(() => {
     const { start, end } = period;
@@ -87,7 +97,12 @@ export default function Budget({ user, settlementDay }: { user: User, settlement
         </div>
         <div className="bg-indigo-50 border border-indigo-100 text-indigo-800 text-xs font-semibold px-4 py-2 rounded-2xl flex items-center gap-2 shadow-xs self-start sm:self-center">
           <Calendar className="w-4 h-4 text-indigo-600" />
-          <span>Chu kỳ: {format(period.start, 'dd/MM/yyyy')} - {format(period.end, 'dd/MM/yyyy')} (Ngày {settlementDay})</span>
+          <span>
+            {period.isCustom 
+              ? `Chu kỳ lương: ${period.cycleName || ''} (${format(period.start, 'dd/MM/yyyy')} - ${format(period.end, 'dd/MM/yyyy')})`
+              : `Chu kỳ: ${format(period.start, 'dd/MM/yyyy')} - ${format(period.end, 'dd/MM/yyyy')} (Quyết toán: Ngày ${settlementDay} hàng tháng)`
+            }
+          </span>
         </div>
       </div>
 

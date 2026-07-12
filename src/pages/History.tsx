@@ -196,18 +196,22 @@ export default function History({ user }: { user: User }) {
       {/* HEADER SECTION WITH FILTER PREFERENCES */}
       <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 leading-tight">Lịch sử</h1>
-          <p className="text-sm text-slate-500 font-medium">Tìm kiếm, lọc danh mục, và quản lý chi tiết mọi hoạt động thu chi.</p>
+          <h1 className="text-3xl font-black tracking-tight text-amber-950 leading-none flex items-center gap-2">
+            Lịch sử <span className="text-2xl">📜</span>
+          </h1>
+          <p className="text-xs sm:text-sm text-amber-800/80 font-bold mt-1.5">
+            Xem lại tất cả các dấu chân chi tiêu của bạn cùng bé Coin nha! ✨
+          </p>
         </div>
         
         {/* Search controls */}
         <div className="relative max-w-sm w-full">
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
-            <Search className="h-4.5 w-4.5 text-slate-400" />
+            <Search className="h-4.5 w-4.5 text-amber-600/60" />
           </div>
           <input
             type="text"
-            className="block w-full rounded-xl border-0 py-2.5 pl-10 pr-4 text-slate-800 ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-[#4F6EF7] text-sm font-medium transition-all"
+            className="block w-full rounded-2xl border-2 border-amber-100 bg-[#FFFDF9] py-2.5 pl-10 pr-4 text-slate-800 focus:border-[#FFC300] focus:ring-0 focus:outline-none text-sm font-semibold transition-all"
             placeholder="Tìm theo ghi chú hoặc danh mục..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -218,43 +222,49 @@ export default function History({ user }: { user: User }) {
       {/* QUICK FILTERS BAR */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Type Filter Buttons */}
-        <div className="flex bg-slate-100 p-1 rounded-xl">
+        <div className="flex bg-amber-50/50 p-1 rounded-xl border border-amber-100/60">
           <button
             onClick={() => setSelectedType('all')}
-            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              selectedType === 'all' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-800'
+            className={`px-3.5 py-1.5 text-xs font-black rounded-lg transition-all cursor-pointer ${
+              selectedType === 'all' 
+                ? 'bg-amber-100 text-amber-950 border border-amber-200/50 shadow-sm' 
+                : 'text-amber-800/70 hover:text-amber-950'
             }`}
           >
-            Tất cả
+            🌟 Tất cả
           </button>
           <button
             onClick={() => setSelectedType('expense')}
-            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              selectedType === 'expense' ? 'bg-white shadow text-[#F0426B]' : 'text-slate-500 hover:text-slate-800'
+            className={`px-3.5 py-1.5 text-xs font-black rounded-lg transition-all cursor-pointer ${
+              selectedType === 'expense' 
+                ? 'bg-rose-100/90 text-rose-700 border border-rose-200/50 shadow-sm' 
+                : 'text-amber-800/70 hover:text-amber-950'
             }`}
           >
-            Chi phí
+            💸 Chi phí
           </button>
           <button
             onClick={() => setSelectedType('income')}
-            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              selectedType === 'income' ? 'bg-white shadow text-[#17B978]' : 'text-slate-500 hover:text-slate-800'
+            className={`px-3.5 py-1.5 text-xs font-black rounded-lg transition-all cursor-pointer ${
+              selectedType === 'income' 
+                ? 'bg-emerald-100/90 text-emerald-700 border border-emerald-200/50 shadow-sm' 
+                : 'text-amber-800/70 hover:text-amber-950'
             }`}
           >
-            Thu nhập
+            💰 Thu nhập
           </button>
         </div>
 
         {/* Category Filter Dropdown */}
-        <div className="flex items-center gap-2 bg-white rounded-xl ring-1 ring-slate-200 px-3 py-1 text-xs font-bold text-slate-600 transition-all hover:bg-slate-50">
-          <Filter className="w-3.5 h-3.5 text-slate-400" />
+        <div className="flex items-center gap-2 bg-[#FFFDF9] rounded-2xl border-2 border-amber-100 px-3.5 py-1.5 text-xs font-black text-amber-800 transition-all hover:bg-amber-50/30">
+          <Filter className="w-3.5 h-3.5 text-amber-600/60" />
           <span>Danh mục:</span>
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="bg-transparent border-none outline-none text-slate-800 font-semibold cursor-pointer"
+            className="bg-transparent border-none outline-none text-amber-950 font-extrabold cursor-pointer focus:ring-0"
           >
-            <option value="all">Tất cả danh mục</option>
+            <option value="all">Tất cả</option>
             {categories.map(cat => (
               <option key={cat.id} value={cat.id}>{cat.name}</option>
             ))}
@@ -265,23 +275,23 @@ export default function History({ user }: { user: User }) {
         {selectedCategory !== 'all' && (
           <button
             onClick={() => setSelectedCategory('all')}
-            className="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-[#4F6EF7] px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+            className="flex items-center gap-1.5 bg-amber-100 hover:bg-amber-200/80 text-amber-950 px-3 py-1.5 rounded-2xl text-xs font-black cursor-pointer transition-all border border-amber-200/60"
           >
-            <span>Đang lọc: {catMap[selectedCategory]?.name}</span>
-            <X className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>Đang xem: {catMap[selectedCategory]?.name}</span>
+            <X className="w-3.5 h-3.5 stroke-[3]" />
           </button>
         )}
       </div>
 
       {/* TRANSACTION ITEMS LIST */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100/60 overflow-hidden">
-        <div className="divide-y divide-slate-100">
+      <div className="bg-white rounded-3xl shadow-lg shadow-amber-150/5 border-4 border-[#FFF2D8] overflow-hidden">
+        <div className="divide-y divide-amber-100/50">
           {filtered.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
-              <Search className="w-12 h-12 text-slate-200 stroke-[1.5]" />
+            <div className="p-12 text-center text-amber-800 flex flex-col items-center justify-center gap-3">
+              <span className="text-4xl">🐾</span>
               <div>
-                <p className="font-bold text-slate-800">Không tìm thấy giao dịch nào</p>
-                <p className="text-xs text-slate-400 mt-1">Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm của bạn.</p>
+                <p className="font-black text-amber-950">Chưa có giao dịch nào hết á</p>
+                <p className="text-xs text-amber-700/70 mt-1">Ghi chép giao dịch ngay để bé Coin hiển thị ở đây nha!</p>
               </div>
             </div>
           ) : (
@@ -289,32 +299,32 @@ export default function History({ user }: { user: User }) {
               const cat = catMap[t.category_id];
               const Icon = cat && Icons[cat.icon as keyof typeof Icons] ? (Icons[cat.icon as keyof typeof Icons] as any) : Icons.Circle;
               return (
-                <div key={t.id} className="p-4 sm:p-5 flex items-center justify-between hover:bg-slate-50/50 transition-colors group gap-3">
+                <div key={t.id} className="p-4 sm:p-5 flex items-center justify-between hover:bg-[#FFFDF9] transition-colors group gap-3">
                   <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
                     <div 
-                      className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-sm"
-                      style={{ backgroundColor: `${cat?.color || '#cbd5e1'}15`, color: cat?.color || '#94a3b8' }}
+                      className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-sm border border-white"
+                      style={{ backgroundColor: `${cat?.color || '#ffd000'}15`, color: cat?.color || '#b45309' }}
                     >
-                      <Icon className="w-5.5 h-5.5 stroke-[2]" />
+                      <Icon className="w-5.5 h-5.5 stroke-[2.25]" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold text-slate-900 tracking-tight leading-snug truncate">{cat?.name || 'Không rõ danh mục'}</p>
-                      <div className="flex items-center text-xs text-slate-400 space-x-2 mt-1 font-semibold min-w-0">
+                      <p className="text-sm font-extrabold text-amber-950 tracking-tight leading-snug truncate">{cat?.name || 'Không rõ danh mục'}</p>
+                      <div className="flex items-center text-[11px] text-amber-800/60 space-x-2 mt-0.5 font-bold min-w-0">
                         <span className="flex items-center gap-1 shrink-0">
-                          <Calendar className="w-3 h-3 text-slate-300" />
+                          <Calendar className="w-3 h-3 text-amber-500/50" />
                           {format(new Date(t.date), 'dd/MM/yyyy')}
                         </span>
                         {t.note && (
                           <>
-                            <span className="text-slate-300 shrink-0">&bull;</span>
-                            <span className="truncate text-slate-500 font-medium">{t.note}</span>
+                            <span className="text-amber-200 shrink-0">&bull;</span>
+                            <span className="truncate text-amber-900/80 font-semibold">{t.note}</span>
                           </>
                         )}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2 sm:space-x-4 shrink-0">
-                    <span className={`font-bold font-mono tracking-tight text-sm sm:text-base tabular-nums shrink-0 ${t.type === 'income' ? 'text-[#17B978]' : 'text-[#F0426B]'}`}>
+                    <span className={`font-bold font-mono tracking-tight text-sm sm:text-base tabular-nums shrink-0 ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
                     </span>
                     
@@ -322,17 +332,17 @@ export default function History({ user }: { user: User }) {
                     <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
                       <button 
                         onClick={() => handleStartEdit(t)}
-                        className="p-1.5 text-slate-400 hover:text-[#4F6EF7] hover:bg-[#4F6EF7]/10 rounded-lg transition-all cursor-pointer"
+                        className="p-1.5 text-amber-700/60 hover:text-amber-900 hover:bg-amber-100/50 rounded-lg transition-all cursor-pointer"
                         title="Sửa giao dịch"
                       >
-                        <Edit2 className="w-4 h-4" />
+                        <Edit2 className="w-4 h-4 stroke-[2.5]" />
                       </button>
                       <button 
                         onClick={() => handleDelete(t)}
-                        className="p-1.5 text-slate-400 hover:text-[#F0426B] hover:bg-[#F0426B]/10 rounded-lg transition-all cursor-pointer"
+                        className="p-1.5 text-rose-500/60 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
                         title="Xóa giao dịch"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-4 h-4 stroke-[2.5]" />
                       </button>
                     </div>
                   </div>
@@ -346,51 +356,55 @@ export default function History({ user }: { user: User }) {
       {/* EDIT MODAL DIALOG OVERLAY */}
       {editingTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setEditingTx(null)} />
-          <div className="relative bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <h3 className="text-lg font-bold text-slate-900 mb-4 tracking-tight leading-none">Sửa giao dịch</h3>
+          <div className="absolute inset-0 bg-[#3A2A1A]/40 backdrop-blur-sm" onClick={() => setEditingTx(null)} />
+          <div className="relative bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border-4 border-[#FFF2D8] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <h3 className="text-lg font-black text-amber-950 mb-4 tracking-tight leading-none">Sửa giao dịch 📝</h3>
             <form onSubmit={handleSaveEdit} className="space-y-4">
-              <div className="flex bg-slate-100 p-1 rounded-xl">
+              <div className="flex bg-amber-50/50 p-1 rounded-xl border border-amber-100">
                 <button
                   type="button"
                   onClick={() => setEditType('expense')}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                    editType === 'expense' ? 'bg-white shadow text-[#F0426B]' : 'text-slate-500 hover:text-slate-800'
+                  className={`flex-1 py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                    editType === 'expense' 
+                      ? 'bg-rose-100/90 text-rose-700 border border-rose-200/50 shadow-sm' 
+                      : 'text-amber-800/70 hover:text-amber-950'
                   }`}
                 >
-                  Chi phí
+                  💸 Chi phí
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditType('income')}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                    editType === 'income' ? 'bg-white shadow text-[#17B978]' : 'text-slate-500 hover:text-slate-800'
+                  className={`flex-1 py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                    editType === 'income' 
+                      ? 'bg-emerald-100/90 text-emerald-700 border border-emerald-200/50 shadow-sm' 
+                      : 'text-amber-800/70 hover:text-amber-950'
                   }`}
                 >
-                  Thu nhập
+                  💰 Thu nhập
                 </button>
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Số tiền (VND)</label>
+                <label className="block text-xs font-black uppercase tracking-widest text-amber-800/80 mb-1.5 ml-1">Số tiền (VND) 💰</label>
                 <input
                   type="text"
                   required
                   value={editAmount}
                   onChange={(e) => setEditAmount(formatNumberInput(e.target.value))}
-                  className="block w-full rounded-xl border-0 py-2.5 px-3.5 text-slate-800 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-inset focus:ring-[#4F6EF7] text-sm font-mono font-semibold tabular-nums"
+                  className="block w-full rounded-2xl border-2 border-amber-100 bg-[#FFFDF9] py-2.5 px-3.5 text-slate-850 focus:border-[#FFC300] focus:ring-0 focus:outline-none text-sm font-mono font-semibold tabular-nums"
                   placeholder="Ví dụ: 100,000"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Danh mục</label>
+                  <label className="block text-xs font-black uppercase tracking-widest text-amber-800/80 mb-1.5 ml-1">Danh mục 🐾</label>
                   <select
                     value={editCategoryId}
                     onChange={(e) => setEditCategoryId(e.target.value)}
                     required
-                    className="block w-full rounded-xl border-0 py-2.5 px-3 text-slate-800 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-inset focus:ring-[#4F6EF7] text-xs font-semibold bg-white cursor-pointer"
+                    className="block w-full rounded-2xl border-2 border-amber-100 bg-[#FFFDF9] py-2.5 px-3.5 text-slate-800 focus:border-[#FFC300] focus:ring-0 focus:outline-none text-xs font-bold cursor-pointer"
                   >
                     {categories.filter(c => c.type === editType).map(cat => (
                       <option key={cat.id} value={cat.id}>{cat.name}</option>
@@ -398,42 +412,42 @@ export default function History({ user }: { user: User }) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Ngày</label>
+                  <label className="block text-xs font-black uppercase tracking-widest text-amber-800/80 mb-1.5 ml-1">Ngày 📅</label>
                   <input
                     type="date"
                     required
                     value={editDate}
                     onChange={(e) => setEditDate(e.target.value)}
-                    className="block w-full rounded-xl border-0 py-2 px-3 text-slate-800 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-inset focus:ring-[#4F6EF7] text-xs font-semibold bg-white cursor-pointer"
+                    className="block w-full rounded-2xl border-2 border-amber-100 bg-[#FFFDF9] py-2 px-3 text-slate-800 focus:border-[#FFC300] focus:ring-0 focus:outline-none text-xs font-bold cursor-pointer"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Ghi chú thêm</label>
+                <label className="block text-xs font-black uppercase tracking-widest text-amber-800/80 mb-1.5 ml-1">Ghi chú thêm ✍️</label>
                 <input
                   type="text"
                   value={editNote}
                   onChange={(e) => setEditNote(e.target.value)}
-                  className="block w-full rounded-xl border-0 py-2.5 px-3.5 text-slate-800 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-inset focus:ring-[#4F6EF7] text-sm font-medium"
+                  className="block w-full rounded-2xl border-2 border-amber-100 bg-[#FFFDF9] py-2.5 px-3.5 text-slate-800 focus:border-[#FFC300] focus:ring-0 focus:outline-none text-sm font-semibold animate-none"
                   placeholder="Ghi chú cái gì đó..."
                 />
               </div>
 
-              <div className="flex justify-end space-x-3 mt-6 pt-3 border-t border-slate-100">
+              <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-amber-100/50">
                 <button 
                   type="button" 
                   onClick={() => setEditingTx(null)} 
-                  className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
+                  className="px-4 py-2.5 text-sm font-bold text-amber-800 hover:bg-amber-50 rounded-2xl transition-all cursor-pointer"
                 >
-                  Hủy
+                  Hủy nha
                 </button>
                 <button 
                   type="submit" 
                   disabled={isSaving}
-                  className="px-5 py-2 text-sm font-semibold text-white bg-[#4F6EF7] hover:bg-[#4F6EF7]/90 rounded-xl shadow-md shadow-indigo-100 hover:scale-[1.02] transition-all flex items-center gap-1 cursor-pointer"
+                  className="px-5 py-2.5 text-sm font-black text-amber-950 bg-gradient-to-r from-[#FFD000] to-[#FFB700] hover:from-[#FFD61A] hover:to-[#FFC41A] rounded-2xl shadow-sm border-b-2 border-amber-600 hover:scale-[1.02] transition-all flex items-center gap-1 cursor-pointer"
                 >
-                  {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+                  {isSaving ? 'Đợi bé...' : 'Lưu lại nè! ✨'}
                 </button>
               </div>
             </form>

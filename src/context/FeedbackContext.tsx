@@ -56,6 +56,12 @@ export const FeedbackProvider = ({ children }: { children: ReactNode }) => {
   ) => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, message, type, onUndo, undoLabel }]);
+
+    // Auto-dismiss: 1s for success as requested, 4s for others
+    const duration = type === 'success' ? 1000 : 4000;
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, duration);
   };
 
   const confirm = ({

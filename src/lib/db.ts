@@ -100,18 +100,19 @@ export const updateSettlementDay = (uid: string, day: number) => {
   return update(refPath, { settlement_day: day, updated_at: new Date().getTime() });
 };
 
-export const subscribeToSettlementConfig = (uid: string, callback: (config: { settlement_day: number; mode: 'fixed' | 'flexible' }) => void) => {
+export const subscribeToSettlementConfig = (uid: string, callback: (config: { settlement_day: number; mode: 'fixed' | 'flexible'; estimated_income?: number }) => void) => {
   const refPath = ref(db, `settlement_config/${uid}`);
   return onValue(refPath, (snapshot) => {
     const data = snapshot.val() || {};
     callback({
       settlement_day: data.settlement_day !== undefined ? data.settlement_day : 1,
-      mode: data.mode || 'fixed'
+      mode: data.mode || 'fixed',
+      estimated_income: data.estimated_income !== undefined ? data.estimated_income : 10000000
     });
   });
 };
 
-export const updateSettlementConfig = (uid: string, config: { settlement_day?: number; mode: 'fixed' | 'flexible' }) => {
+export const updateSettlementConfig = (uid: string, config: { settlement_day?: number; mode?: 'fixed' | 'flexible'; estimated_income?: number }) => {
   const refPath = ref(db, `settlement_config/${uid}`);
   return update(refPath, {
     ...config,

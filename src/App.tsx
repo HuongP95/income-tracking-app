@@ -25,7 +25,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem('finly_active_tab') || 'dashboard';
   });
-  const [settlementConfig, setSettlementConfig] = useState<{ settlement_day: number; mode: 'fixed' | 'flexible' }>({ settlement_day: 1, mode: 'fixed' });
+  const [settlementConfig, setSettlementConfig] = useState<{ settlement_day: number; mode: 'fixed' | 'flexible'; estimated_income?: number }>({ settlement_day: 1, mode: 'fixed' });
   const [customCycles, setCustomCycles] = useState<CustomCycle[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<BudgetType[]>([]);
@@ -135,14 +135,31 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="flex h-screen w-screen flex-col items-center justify-center bg-[#0B0F19] text-white">
+      <div className="flex h-screen w-screen flex-col items-center justify-center bg-[#FFFDF9] text-slate-800">
         <div className="relative flex flex-col items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-[#4F6EF7] flex items-center justify-center shadow-lg shadow-[#4F6EF7]/20 animate-bounce">
-            <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
+          <div className="relative">
+            {/* Soft shadow that expands and contracts as coin floats */}
+            <motion.div 
+              animate={{ scale: [0.8, 1.2, 0.8] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+              className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-1 bg-amber-200/50 blur-[1px] rounded-full"
+            />
+            <motion.div
+              animate={{ y: [0, -15, 0], rotate: [0, 10, -10, 0] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+              className="w-16 h-16 bg-gradient-to-b from-[#FFE45E] to-[#FFC300] rounded-full flex items-center justify-center shadow-md shadow-amber-300/40 border-4 border-white select-none"
+            >
+              <div className="flex flex-col items-center justify-center w-full h-full relative">
+                <span className="text-[10px] font-black text-amber-800 leading-none mb-0.5">$</span>
+                <div className="flex space-x-1.5 mb-0.5">
+                  <div className="w-1.5 h-1.5 bg-slate-900 rounded-full" />
+                  <div className="w-1.5 h-1.5 bg-slate-900 rounded-full" />
+                </div>
+                <div className="w-2 h-1 border-b-2 border-slate-900 rounded-b-full" />
+              </div>
+            </motion.div>
           </div>
-          <span className="text-lg font-bold tracking-wider text-slate-300 animate-pulse">FINLY PREMIUM</span>
+          <span className="text-sm font-black tracking-wider text-amber-800 animate-pulse">FINLY PREMIUM • Chờ bé xíu nha... ✨</span>
         </div>
       </div>
     );
@@ -158,27 +175,34 @@ export default function App() {
     { id: 'plan', label: 'Kế hoạch', icon: Target },
     { id: 'reports', label: 'Báo cáo', icon: PieChart },
     { id: 'budget', label: 'Ngân sách', icon: Wallet },
-    { id: 'debts', label: 'Nợ & Chia tiền', icon: CreditCard },
+    { id: 'debts', label: 'Nợ & Chia', icon: CreditCard },
   ];
 
   const AdviceIcon = advice.icon;
 
   return (
-    <div className="flex h-screen bg-[#F7F8FA] flex-col md:flex-row font-sans text-slate-800 overflow-hidden">
+    <div className="flex h-screen bg-[#FFFDF9] flex-col md:flex-row font-sans text-slate-800 overflow-hidden">
       {/* Sidebar Navigation */}
-      <nav className="bg-white md:w-64 flex-shrink-0 order-2 md:order-1 border-t md:border-t-0 border-slate-200/80 md:border-r fixed bottom-0 w-full md:relative z-20 pb-safe shadow-lg shadow-slate-100/40 md:flex md:flex-col h-16 md:h-screen">
+      <nav className="bg-[#FFFDF9] md:w-64 flex-shrink-0 order-2 md:order-1 border-t md:border-t-0 border-amber-100 md:border-r fixed bottom-0 w-full md:relative z-20 pb-safe shadow-lg shadow-amber-100/30 md:flex md:flex-col h-16 md:h-screen">
         <div className="flex md:flex-col h-full md:p-6 p-1.5 justify-around md:justify-start">
           
           {/* Logo */}
           <div className="hidden md:flex items-center space-x-3 mb-10 px-3 py-1">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-[#4F6EF7] to-indigo-400 flex items-center justify-center text-white shadow-md shadow-[#4F6EF7]/20">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-              </svg>
+            <div className="h-10 w-10 rounded-full bg-gradient-to-b from-[#FFE45E] to-[#FFC300] flex items-center justify-center text-amber-950 shadow-md border-2 border-white select-none relative shrink-0">
+              <span className="absolute -top-1 -right-1 text-xs">✨</span>
+              <div className="flex flex-col items-center justify-center scale-[0.8]">
+                <div className="flex space-x-1.5 mb-0.5">
+                  <div className="w-1 h-1 bg-slate-900 rounded-full" />
+                  <div className="w-1 h-1 bg-slate-900 rounded-full" />
+                </div>
+                <div className="w-2 h-1 border-b-2 border-slate-900 rounded-b-full" />
+              </div>
             </div>
             <div className="flex flex-col">
-              <span className="text-lg font-bold text-slate-900 tracking-tight leading-none">Finly</span>
-              <span className="text-[10px] text-[#4F6EF7] font-semibold tracking-widest mt-0.5">PREMIUM</span>
+              <span className="text-lg font-black text-amber-950 tracking-tight leading-none flex items-center gap-1">
+                Finly <span className="text-sm">🐾</span>
+              </span>
+              <span className="text-[10px] text-amber-600 font-bold tracking-widest mt-0.5">KUTE EDITION</span>
             </div>
           </div>
           
@@ -192,17 +216,17 @@ export default function App() {
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
                   className={cn(
-                    "relative flex flex-col md:flex-row items-center md:space-x-3 px-1 sm:px-3.5 py-1.5 md:py-3 rounded-xl transition-all flex-1 md:flex-none font-semibold text-xs md:text-sm cursor-pointer",
+                    "relative flex flex-col md:flex-row items-center md:space-x-3 px-1 sm:px-3.5 py-1.5 md:py-3 rounded-2xl transition-all flex-1 md:flex-none font-bold text-xs md:text-sm cursor-pointer",
                     isActive 
-                      ? "text-[#4F6EF7] bg-indigo-50/70 md:bg-indigo-50/50" 
-                      : "text-slate-500 hover:text-slate-900 hover:bg-slate-50/80"
+                      ? "text-amber-950 bg-amber-100/80 border border-amber-200/50 shadow-sm" 
+                      : "text-amber-800/70 hover:text-amber-950 hover:bg-amber-50/50"
                   )}
                 >
                   {/* Active Indicator Line for Desktop */}
                   {isActive && (
-                    <span className="hidden md:block absolute left-0 top-1/4 bottom-1/4 w-1 rounded-r bg-[#4F6EF7]" />
+                    <span className="hidden md:block absolute left-0 top-1/4 bottom-1/4 w-1 rounded-r-full bg-[#FFC300]" />
                   )}
-                  <Icon className={cn("w-[21px] h-[21px] stroke-[1.75px]", isActive ? "text-[#4F6EF7]" : "text-slate-400")} />
+                  <Icon className={cn("w-[21px] h-[21px] stroke-[2.25px]", isActive ? "text-[#FFB700]" : "text-amber-700/50")} />
                   <span className="text-[10px] md:text-sm mt-1 md:mt-0 tracking-tight">{item.label}</span>
                 </button>
               );
@@ -211,14 +235,14 @@ export default function App() {
 
           {/* Advice Section */}
           <div className="hidden md:block mt-auto mb-6 px-1">
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 relative overflow-hidden group">
+            <div className="p-4 bg-[#FFFBF0] rounded-2xl border-2 border-[#FFF2D8] relative overflow-hidden group">
               <div className="flex items-center gap-2 mb-2">
-                <div className={cn("p-1.5 rounded-lg flex items-center justify-center", advice.color)}>
-                  <AdviceIcon className="w-4 h-4" />
+                <div className={cn("p-1.5 rounded-xl flex items-center justify-center shadow-sm bg-white")}>
+                  <span>💬</span>
                 </div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Lời khuyên</span>
+                <span className="text-[11px] font-bold text-amber-800/80 uppercase tracking-widest">Bé Coin khuyên...</span>
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed font-semibold">
+              <p className="text-xs text-amber-950 leading-relaxed font-bold">
                 {advice.text}
               </p>
             </div>
@@ -227,28 +251,26 @@ export default function App() {
           {/* Logout Button */}
           <button 
             onClick={() => signOut(auth)}
-            className="hidden md:flex items-center space-x-3 px-4 py-3 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors font-semibold text-sm cursor-pointer"
+            className="hidden md:flex items-center space-x-3 px-4 py-3 text-amber-700 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all font-bold text-sm cursor-pointer"
           >
-            <LogOut className="w-5 h-5 text-slate-400 group-hover:text-red-500" />
+            <LogOut className="w-5 h-5 text-amber-500/60 group-hover:text-rose-500" />
             <span className="tracking-tight">Đăng xuất</span>
           </button>
         </div>
       </nav>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto order-1 md:order-2 pb-20 md:pb-0 relative flex flex-col h-full">
+      <main className="flex-1 overflow-y-auto order-1 md:order-2 pb-20 md:pb-0 relative flex flex-col h-full bg-gradient-to-b from-[#FFFDF9] via-[#FFF9F2] to-[#FFF3E3]">
         {/* Mobile Header */}
-        <header className="md:hidden bg-white border-b border-slate-200/80 px-5 py-3.5 flex justify-between items-center sticky top-0 z-20 shadow-sm">
+        <header className="md:hidden bg-[#FFFDF9] border-b border-amber-100 px-5 py-3.5 flex justify-between items-center sticky top-0 z-20 shadow-sm">
           <div className="flex items-center space-x-2">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-[#4F6EF7] to-indigo-400 flex items-center justify-center text-white">
-              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-              </svg>
+            <div className="h-8 w-8 rounded-full bg-gradient-to-b from-[#FFE45E] to-[#FFC300] flex items-center justify-center text-amber-950 shadow border border-white">
+              <span className="text-xs font-black">$</span>
             </div>
-            <span className="text-base font-bold text-slate-900 tracking-tight">Finly</span>
+            <span className="text-base font-black text-amber-950 tracking-tight flex items-center gap-1">Finly <span className="text-xs">🐾</span></span>
           </div>
-          <button onClick={() => signOut(auth)} className="text-slate-500 hover:text-red-600 p-1 rounded-lg">
-            <LogOut className="w-5 h-5" />
+          <button onClick={() => signOut(auth)} className="text-amber-700/70 hover:text-rose-600 p-1 rounded-lg">
+            <LogOut className="w-5.5 h-5.5" />
           </button>
         </header>
 

@@ -5,7 +5,8 @@ import { Transaction, Category, CustomCycle } from '../types';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { format, isWithinInterval } from 'date-fns';
 import { formatCurrency, getSettlementPeriod, getCurrentPeriod } from '../lib/utils';
-import { Calendar } from 'lucide-react';
+import { Calendar, HelpCircle, BarChart3, TrendingUp, Sparkles, Receipt, Info, FileSpreadsheet, ChevronRight } from 'lucide-react';
+import { ListSkeleton } from '../components/Skeleton';
 
 export default function Reports({ 
   user, 
@@ -23,10 +24,26 @@ export default function Reports({
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [reportType, setReportType] = useState<'month' | 'year'>('month');
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-
+  const [loading, setLoading] = useState(true);
+ 
   useEffect(() => {
-    const unsubTx = subscribeToTransactions(user.uid, setTransactions);
-    const unsubCat = subscribeToCategories(user.uid, setCategories);
+    let loadedT = false;
+    let loadedC = false;
+    const checkLoaded = () => {
+      if (loadedT && loadedC) setLoading(false);
+    };
+
+    const unsubTx = subscribeToTransactions(user.uid, (data) => {
+      setTransactions(data);
+      loadedT = true;
+      checkLoaded();
+    });
+    const unsubCat = subscribeToCategories(user.uid, (data) => {
+      setCategories(data);
+      loadedC = true;
+      checkLoaded();
+    });
+
     return () => {
       unsubTx();
       unsubCat();
@@ -116,7 +133,7 @@ export default function Reports({
     return Object.keys(grouped).map(catId => ({
       name: catMap[catId]?.name || 'Không rõ',
       value: grouped[catId],
-      color: catMap[catId]?.color || '#999'
+      color: catMap[catId]?.color || '#94a3b8'
     })).sort((a, b) => b.value - a.value);
   }, [monthTxs, catMap]);
 
@@ -158,50 +175,73 @@ export default function Reports({
     };
   }, [currentYear, settlementDay, transactions, calculateAdjustedStats]);
 
-  const barData = [
-    { name: 'Thu nhập vs Chi phí', Thu: stats.income, Chi: stats.expense }
-  ];
+  const barData = useMemo(() => {
+    return [
+      { name: 'Phân tích dòng tiền', Thu: stats.income, Chi: stats.expense }
+    ];
+  }, [stats]);
 
   const yearOptions = useMemo(() => {
     const currentYearVal = new Date().getFullYear();
     return Array.from({ length: 5 }, (_, i) => currentYearVal - 2 + i);
   }, []);
 
+  const handlePieSectorClick = useCallback((data: any) => {
+    if (data && data.name) {
+      const matchedCat = categories.find(c => c.name === data.name);
+      if (matchedCat?.id) {
+        localStorage.setItem('filter_category_id', matchedCat.id);
+        // Dispatch custom navigation event
+        window.dispatchEvent(new CustomEvent('finly_change_tab', { detail: { tab: 'history' } }));
+      }
+    }
+  }, [categories]);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="h-10 w-64 bg-slate-200 rounded animate-pulse" />
+        <ListSkeleton />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* Tab Selector */}
-      <div className="flex border-b border-gray-200">
+      {/* Premium Sliding Segmented Tab Selector */}
+      <div className="flex bg-slate-100 p-1 rounded-xl max-w-xs">
         <button
           onClick={() => setReportType('month')}
-          className={`py-2.5 px-4 text-sm font-semibold border-b-2 transition-all ${
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
             reportType === 'month'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              ? 'bg-white shadow text-[#4F6EF7]'
+              : 'text-slate-500 hover:text-slate-800'
           }`}
         >
           Báo cáo tháng
         </button>
         <button
           onClick={() => setReportType('year')}
-          className={`py-2.5 px-4 text-sm font-semibold border-b-2 transition-all ${
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
             reportType === 'year'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              ? 'bg-white shadow text-[#4F6EF7]'
+              : 'text-slate-500 hover:text-slate-800'
           }`}
         >
           Báo cáo năm
         </button>
       </div>
 
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4">
+      {/* FILTER & TITLE HERO ROW */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 leading-tight">
             {reportType === 'month' ? 'Báo cáo tháng' : 'Báo cáo năm'}
           </h1>
-          <p className="text-sm text-gray-500">Phân tích và chi tiết thu chi.</p>
+          <p className="text-sm text-slate-500 font-medium">Báo cáo đa chiều, biểu đồ trực quan, hỗ trợ tối ưu hóa kế hoạch ngân sách.</p>
           {reportType === 'month' && (
-            <div className="mt-1 flex items-center gap-1.5 text-xs text-indigo-600 font-semibold">
-              <Calendar className="w-3.5 h-3.5" />
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-[#4F6EF7] font-bold">
+              <Calendar className="w-3.5 h-3.5 shrink-0" />
               <span>
                 {period.isCustom 
                   ? `Chu kỳ lương: ${period.cycleName || ''} (${format(period.start, 'dd/MM/yyyy')} - ${format(period.end, 'dd/MM/yyyy')})`
@@ -211,19 +251,19 @@ export default function Reports({
             </div>
           )}
         </div>
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-3 shrink-0 self-start sm:self-center">
           {reportType === 'month' ? (
             <input 
               type="month"
               value={format(currentMonth, 'yyyy-MM')}
               onChange={(e) => setCurrentMonth(new Date(e.target.value + '-01T00:00:00'))}
-              className="block rounded-lg border-0 py-2 px-3 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm font-semibold"
+              className="block rounded-xl border-0 py-2.5 px-3.5 text-slate-800 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-[#4F6EF7] text-sm font-bold bg-white cursor-pointer"
             />
           ) : (
             <select
               value={currentYear}
               onChange={(e) => setCurrentYear(Number(e.target.value))}
-              className="block rounded-lg border-0 py-2 px-3 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm font-semibold"
+              className="block rounded-xl border-0 py-2.5 px-3.5 text-slate-800 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-[#4F6EF7] text-sm font-bold bg-white cursor-pointer"
             >
               {yearOptions.map(y => (
                 <option key={y} value={y}>Năm {y}</option>
@@ -235,80 +275,119 @@ export default function Reports({
 
       {reportType === 'month' ? (
         <>
+          {/* THREE-CARD HERO METRICS GRID */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
-              <p className="text-sm font-medium text-gray-500 mb-1">Tổng thu nhập</p>
-              <p className="text-3xl font-bold text-emerald-600">{formatCurrency(stats.income)}</p>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100/50 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-center">
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Tổng thu nhập khả dụng</span>
+              <p className="text-2xl sm:text-3xl font-bold text-[#17B978] font-mono tracking-tight tabular-nums">{formatCurrency(stats.income)}</p>
             </div>
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
-              <p className="text-sm font-medium text-gray-500 mb-1">Tổng chi phí</p>
-              <p className="text-3xl font-bold text-rose-600">{formatCurrency(stats.expense)}</p>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100/50 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-center">
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Tổng chi phí định lượng</span>
+              <p className="text-2xl sm:text-3xl font-bold text-[#F0426B] font-mono tracking-tight tabular-nums">{formatCurrency(stats.expense)}</p>
             </div>
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
-              <p className="text-sm font-medium text-gray-500 mb-1">Tiết kiệm ròng</p>
-              <p className={`text-3xl font-bold ${stats.net >= 0 ? 'text-gray-900' : 'text-rose-600'}`}>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100/50 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-center">
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Tiết kiệm ròng dư thừa</span>
+              <p className={`text-2xl sm:text-3xl font-bold font-mono tracking-tight tabular-nums ${stats.net >= 0 ? 'text-slate-900' : 'text-[#F0426B]'}`}>
                 {formatCurrency(stats.net)}
               </p>
             </div>
           </div>
 
+          {/* NET DEBT FLOW RESOLUTION ALERTS */}
           {(stats.debtPayments > 0 || stats.loanRecoveries > 0) && (
-            <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-indigo-950 mt-4 gap-2 shadow-xs">
-              <div>
-                <span className="font-bold">💡 Giải trình điều chỉnh công nợ:</span>
-                <span className="ml-1">
-                  Thu nhập khả dụng được điều chỉnh do có các giao dịch nợ:
-                  Đã trả nợ <strong className="text-rose-700">-{formatCurrency(stats.debtPayments)}</strong> và Thu hồi nợ <strong className="text-emerald-700">+{formatCurrency(stats.loanRecoveries)}</strong>.
-                </span>
+            <div className="bg-indigo-50/40 border border-indigo-100/40 p-4.5 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-indigo-950 gap-2.5 shadow-xs">
+              <div className="flex items-start gap-2">
+                <Info className="w-4.5 h-4.5 text-[#4F6EF7] shrink-0 mt-0.5" />
+                <p className="font-medium">
+                  <span className="font-bold">Giải trình điều chỉnh công nợ:</span> Số dư khả dụng thực tế của chu kỳ đã được cập nhật do phát sinh hoạt động tín dụng: Đã chi trả nợ <strong className="text-rose-600">-{formatCurrency(stats.debtPayments)}</strong> và Thu hồi nợ <strong className="text-emerald-600">+{formatCurrency(stats.loanRecoveries)}</strong>.
+                </p>
               </div>
-              <div className="font-bold bg-indigo-100 px-2.5 py-1.5 rounded text-indigo-900 self-start sm:self-auto shrink-0 font-mono text-[11px]">
+              <div className="font-bold bg-indigo-100/60 text-indigo-900 px-3 py-1.5 rounded-xl shrink-0 font-mono text-[11px] self-start sm:self-auto shadow-xs">
                 Lượng nợ ròng: {formatCurrency(stats.loanRecoveries - stats.debtPayments)}
               </div>
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">Phân bổ chi phí</h3>
+          {/* CHARTS GRAPH CONTAINER */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            {/* Pie Category Allocation Chart */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100/50 hover:shadow-md transition-all duration-300">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
+                  <BarChart3 className="w-5 h-5 text-[#4F6EF7]" />
+                  Phân bổ chi phí theo danh mục
+                </h3>
+                {pieData.length > 0 && (
+                  <span className="text-[10px] bg-slate-100 font-bold uppercase tracking-wider text-slate-400 px-2.5 py-1 rounded-lg">
+                    Click lát để lọc
+                  </span>
+                )}
+              </div>
               {pieData.length > 0 ? (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={pieData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={5}
-                        dataKey="value"
-                      >
-                        {pieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
+                <div>
+                  <div className="h-68">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={pieData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={68}
+                          outerRadius={88}
+                          paddingAngle={3}
+                          dataKey="value"
+                          onClick={handlePieSectorClick}
+                        >
+                          {pieData.map((entry, index) => (
+                            <Cell 
+                              key={`cell-${index}`} 
+                              fill={entry.color} 
+                              className="cursor-pointer focus:outline-none hover:opacity-90 transition-opacity"
+                            />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          formatter={(value: number) => formatCurrency(value)} 
+                          contentStyle={{ backgroundColor: '#0B0F19', color: '#fff', borderRadius: '12px', border: 'none', padding: '10px 14px', fontSize: '12px', fontWeight: 'bold' }}
+                        />
+                        <Legend iconSize={10} iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-medium text-center mt-3 flex items-center justify-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Mẹo: Click vào bất kỳ danh mục nào để nhảy về Lịch sử lọc chi tiết!</span>
+                  </p>
                 </div>
               ) : (
-                <div className="h-64 flex items-center justify-center text-gray-400">Không có chi phí tháng này</div>
+                <div className="h-68 flex flex-col items-center justify-center text-slate-400 gap-2">
+                  <Receipt className="w-10 h-10 text-slate-200 stroke-[1.5]" />
+                  <p className="text-xs font-semibold">Không có chi phí định lượng phát sinh chu kỳ này.</p>
+                </div>
               )}
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">Thu nhập vs Chi phí</h3>
-              <div className="h-64">
+            {/* Income vs Expense Bar Chart */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100/50 hover:shadow-md transition-all duration-300">
+              <h3 className="text-base font-bold text-slate-900 mb-6 tracking-tight flex items-center gap-1.5">
+                <TrendingUp className="w-5 h-5 text-[#17B978]" />
+                Cân đối thu chi thực tế
+              </h3>
+              <div className="h-68">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                    <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => formatCurrency(val)} />
-                    <Tooltip cursor={{ fill: 'transparent' }} formatter={(value: number) => formatCurrency(value)} />
-                    <Legend />
-                    <Bar dataKey="Thu" name="Thu nhập" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={60} />
-                    <Bar dataKey="Chi" name="Chi phí" fill="#e11d48" radius={[4, 4, 0, 0]} maxBarSize={60} />
+                  <BarChart data={barData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 'bold', fill: '#64748b' }} />
+                    <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => `${(val / 1000000).toFixed(0)}M`} tick={{ fontSize: 11, fill: '#64748b' }} />
+                    <Tooltip 
+                      cursor={{ fill: 'rgba(0, 0, 0, 0.02)' }} 
+                      formatter={(value: number) => formatCurrency(value)} 
+                      contentStyle={{ backgroundColor: '#0B0F19', color: '#fff', borderRadius: '12px', border: 'none', padding: '10px 14px', fontSize: '12px', fontWeight: 'bold' }}
+                    />
+                    <Legend iconSize={10} iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
+                    <Bar dataKey="Thu" name="Thu nhập điều chỉnh" fill="#17B978" radius={[6, 6, 0, 0]} maxBarSize={45} />
+                    <Bar dataKey="Chi" name="Chi phí thuần" fill="#F0426B" radius={[6, 6, 0, 0]} maxBarSize={45} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -317,61 +396,75 @@ export default function Reports({
         </>
       ) : (
         <>
+          {/* YEARLY HERO ROW */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
-              <p className="text-sm font-medium text-gray-500 mb-1">Tổng thu nhập cả năm</p>
-              <p className="text-3xl font-bold text-emerald-600">{formatCurrency(yearlyStats.totalIncome)}</p>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100/50 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-center">
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Thu nhập cả năm ({currentYear})</span>
+              <p className="text-2xl sm:text-3xl font-bold text-[#17B978] font-mono tracking-tight tabular-nums">{formatCurrency(yearlyStats.totalIncome)}</p>
             </div>
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
-              <p className="text-sm font-medium text-gray-500 mb-1">Tổng chi phí cả năm</p>
-              <p className="text-3xl font-bold text-rose-600">{formatCurrency(yearlyStats.totalExpense)}</p>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100/50 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-center">
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Chi phí cả năm ({currentYear})</span>
+              <p className="text-2xl sm:text-3xl font-bold text-[#F0426B] font-mono tracking-tight tabular-nums">{formatCurrency(yearlyStats.totalExpense)}</p>
             </div>
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
-              <p className="text-sm font-medium text-gray-500 mb-1">Tổng tiết kiệm cả năm</p>
-              <p className={`text-3xl font-bold ${yearlyStats.totalNet >= 0 ? 'text-gray-900' : 'text-rose-600'}`}>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100/50 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-center">
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Tích lũy lũy kế</span>
+              <p className={`text-2xl sm:text-3xl font-bold font-mono tracking-tight tabular-nums ${yearlyStats.totalNet >= 0 ? 'text-slate-900' : 'text-[#F0426B]'}`}>
                 {formatCurrency(yearlyStats.totalNet)}
               </p>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-6">Biến động thu chi các tháng trong năm {currentYear}</h3>
+          {/* YEARLY COMPARISON TRENDING CHART */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100/50 hover:shadow-md transition-all duration-300 mt-6">
+            <h3 className="text-base font-bold text-slate-900 mb-6 tracking-tight flex items-center gap-1.5">
+              <BarChart3 className="w-5 h-5 text-[#4F6EF7]" />
+              Biến động thu chi các tháng trong năm {currentYear}
+            </h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={yearlyStats.monthsData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                  <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => formatCurrency(val)} />
-                  <Tooltip cursor={{ fill: 'transparent' }} formatter={(value: number) => formatCurrency(value)} />
-                  <Legend />
-                  <Bar dataKey="Thu nhập" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Chi phí" fill="#e11d48" radius={[4, 4, 0, 0]} />
+                <BarChart data={yearlyStats.monthsData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 'bold', fill: '#64748b' }} />
+                  <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => `${(val / 1000000).toFixed(0)}M`} tick={{ fontSize: 11, fill: '#64748b' }} />
+                  <Tooltip 
+                    cursor={{ fill: 'rgba(0, 0, 0, 0.02)' }} 
+                    formatter={(value: number) => formatCurrency(value)} 
+                    contentStyle={{ backgroundColor: '#0B0F19', color: '#fff', borderRadius: '12px', border: 'none', padding: '10px 14px', fontSize: '12px', fontWeight: 'bold' }}
+                  />
+                  <Legend iconSize={10} iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
+                  <Bar dataKey="Thu nhập" fill="#17B978" radius={[5, 5, 0, 0]} />
+                  <Bar dataKey="Chi phí" fill="#F0426B" radius={[5, 5, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mt-6">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900">Chi tiết theo tháng</h3>
+          {/* MONTH-BY-MONTH GRID DETAILED LIST */}
+          <div className="bg-white rounded-2xl border border-slate-100/60 shadow-sm overflow-hidden mt-6">
+            <div className="px-6 py-4.5 border-b border-slate-100/60 flex items-center gap-1.5 bg-slate-50/50">
+              <FileSpreadsheet className="w-5 h-5 text-[#4F6EF7]" />
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Bảng chi tiết số liệu theo tháng</h3>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-slate-100">
+                <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Tháng</th>
-                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Thu nhập</th>
-                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Chi phí</th>
-                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Tiết kiệm ròng</th>
+                    <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-400">Tháng</th>
+                    <th className="px-6 py-3.5 text-right text-xs font-bold uppercase tracking-wider text-slate-400">Thu nhập ròng</th>
+                    <th className="px-6 py-3.5 text-right text-xs font-bold uppercase tracking-wider text-slate-400">Chi phí ròng</th>
+                    <th className="px-6 py-3.5 text-right text-xs font-bold uppercase tracking-wider text-slate-400">Tích lũy thặng dư</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200 font-mono text-sm">
+                <tbody className="bg-white divide-y divide-slate-100 font-mono text-sm">
                   {yearlyStats.monthsData.map((row) => (
-                    <tr key={row.name} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 font-sans font-medium">{row.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-emerald-600 font-bold">{formatCurrency(row['Thu nhập'])}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-rose-600 font-bold">{formatCurrency(row['Chi phí'])}</td>
-                      <td className={`px-6 py-4 whitespace-nowrap text-right font-bold ${row['Tiết kiệm'] >= 0 ? 'text-gray-900' : 'text-rose-600'}`}>
+                    <tr key={row.name} className="hover:bg-slate-50/40 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-slate-900 font-sans font-bold flex items-center gap-1">
+                        <span>{row.name}</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-300" />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-[#17B978] font-bold tabular-nums">{formatCurrency(row['Thu nhập'])}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-[#F0426B] font-bold tabular-nums">{formatCurrency(row['Chi phí'])}</td>
+                      <td className={`px-6 py-4 whitespace-nowrap text-right font-bold tabular-nums ${row['Tiết kiệm'] >= 0 ? 'text-slate-900' : 'text-[#F0426B]'}`}>
                         {formatCurrency(row['Tiết kiệm'])}
                       </td>
                     </tr>

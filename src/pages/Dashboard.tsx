@@ -230,7 +230,14 @@ export default function Dashboard({ user }: { user: User }) {
             <div className="flex-1">
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-sm font-medium text-gray-700">Danh mục</label>
-                <button type="button" onClick={() => setShowCategoryModal(true)} className="text-xs text-indigo-600 hover:text-indigo-700 flex items-center">
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setNewCatType(type);
+                    setShowCategoryModal(true);
+                  }} 
+                  className="text-xs text-indigo-600 hover:text-indigo-700 flex items-center"
+                >
                   <Plus className="w-3 h-3 mr-1" /> Thêm
                 </button>
               </div>

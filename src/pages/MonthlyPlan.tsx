@@ -103,8 +103,17 @@ export default function MonthlyPlan({
     const netDebtFlow = loanRecoveries - debtPayments;
     const adjustedIncome = regularIncome + netDebtFlow;
     const adjustedExpense = regularExpense;
+    const rawIncome = regularIncome + loanRecoveries;
+    const rawExpense = regularExpense + debtPayments;
 
-    return { income: adjustedIncome, expense: adjustedExpense };
+    return { 
+      income: adjustedIncome, 
+      expense: adjustedExpense,
+      rawIncome,
+      rawExpense,
+      debtPayments,
+      loanRecoveries
+    };
   }, [transactions, period, catMap]);
 
   const rawPlannedIncome = parseNumberInput(plannedIncome);
@@ -551,9 +560,18 @@ export default function MonthlyPlan({
                   style={{ width: `${Math.min((actualStats.income / (rawPlannedIncome || 1)) * 100, 100)}%` }}
                 />
               </div>
-              <p className="text-xs text-gray-500 text-right">
-                Đạt được {((actualStats.income / (rawPlannedIncome || 1)) * 100).toFixed(1)}% mục tiêu
-              </p>
+              <div className="flex justify-between text-xs mt-1">
+                <span className="text-gray-500">
+                  {actualStats.debtPayments > 0 && (
+                    <span className="text-amber-700 font-bold block">
+                      ⚠️ Đã trừ {formatCurrency(actualStats.debtPayments)} trả nợ. Tổng thu nhập gốc: {formatCurrency(actualStats.rawIncome)}
+                    </span>
+                  )}
+                </span>
+                <span className="text-gray-500">
+                  Đạt được {((actualStats.income / (rawPlannedIncome || 1)) * 100).toFixed(1)}% mục tiêu
+                </span>
+              </div>
             </div>
 
             {/* Expense Progress */}
@@ -579,6 +597,11 @@ export default function MonthlyPlan({
               <div className="flex justify-between text-xs mt-1">
                 <span className={isExpenseOverPlan ? "text-rose-600 font-bold" : "text-gray-500"}>
                   {isExpenseOverPlan ? `Vượt quá kế hoạch ${formatCurrency(actualStats.expense - rawPlannedExpense)}` : 'Chi tiêu trong tầm kiểm soát'}
+                  {actualStats.debtPayments > 0 && (
+                    <span className="text-slate-500 block mt-0.5 font-medium">
+                      (Chưa bao gồm {formatCurrency(actualStats.debtPayments)} trả nợ. Tổng chi tiêu thực tế: {formatCurrency(actualStats.rawExpense)})
+                    </span>
+                  )}
                 </span>
                 <span className="text-gray-500">
                   Đã tiêu {((actualStats.expense / (rawPlannedExpense || 1)) * 100).toFixed(1)}% trần

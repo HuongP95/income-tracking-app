@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { User } from 'firebase/auth';
-import { subscribeToTransactions, subscribeToCategories } from '../lib/db';
-import { Transaction, Category, CustomCycle } from '../types';
+import { subscribeToTransactions, subscribeToCategories, subscribeToSavings } from '../lib/db';
+import { Transaction, Category, CustomCycle, SavingTransaction } from '../types';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { format, isWithinInterval } from 'date-fns';
 import { formatCurrency, getSettlementPeriod, getCurrentPeriod } from '../lib/utils';
-import { Calendar, HelpCircle, BarChart3, TrendingUp, Sparkles, Receipt, Info, FileSpreadsheet, ChevronRight } from 'lucide-react';
+import { Calendar, HelpCircle, BarChart3, TrendingUp, Sparkles, Receipt, Info, FileSpreadsheet, ChevronRight, PiggyBank } from 'lucide-react';
 import { ListSkeleton } from '../components/Skeleton';
 
 export default function Reports({ 
@@ -21,6 +21,7 @@ export default function Reports({
 }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [savings, setSavings] = useState<SavingTransaction[]>([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [reportType, setReportType] = useState<'month' | 'year'>('month');
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
@@ -29,8 +30,9 @@ export default function Reports({
   useEffect(() => {
     let loadedT = false;
     let loadedC = false;
+    let loadedS = false;
     const checkLoaded = () => {
-      if (loadedT && loadedC) setLoading(false);
+      if (loadedT && loadedC && loadedS) setLoading(false);
     };
 
     const unsubTx = subscribeToTransactions(user.uid, (data) => {
@@ -43,10 +45,16 @@ export default function Reports({
       loadedC = true;
       checkLoaded();
     });
+    const unsubSavings = subscribeToSavings(user.uid, (data) => {
+      setSavings(data);
+      loadedS = true;
+      checkLoaded();
+    });
 
     return () => {
       unsubTx();
       unsubCat();
+      unsubSavings();
     };
   }, [user.uid]);
 
@@ -111,9 +119,28 @@ export default function Reports({
     };
   }, [catMap]);
 
+  const getPeriodSavings = useCallback((start: Date, end: Date) => {
+    let deposits = 0;
+    let withdrawals = 0;
+    savings.forEach(s => {
+      if (isWithinInterval(new Date(s.date), { start, end })) {
+        if (s.type === 'deposit') {
+          deposits += s.amount;
+        } else {
+          withdrawals += s.amount;
+        }
+      }
+    });
+    return deposits - withdrawals;
+  }, [savings]);
+
   const stats = useMemo(() => {
     return calculateAdjustedStats(monthTxs);
   }, [monthTxs, calculateAdjustedStats]);
+
+  const periodSavings = useMemo(() => {
+    return getPeriodSavings(period.start, period.end);
+  }, [period, getPeriodSavings]);
 
   const pieData = useMemo(() => {
     const expenses = monthTxs.filter(t => {
@@ -148,38 +175,50 @@ export default function Reports({
       );
 
       const mStats = calculateAdjustedStats(cycleTxs);
+      const mSavings = getPeriodSavings(cycle.start, cycle.end);
+
       return {
         monthIndex: i,
         name: `Tháng ${i + 1}`,
-        'Thu nhập': mStats.income,
-        'Chi phí': mStats.expense,
-        'Tiết kiệm': mStats.net,
+        'Thu nhập': mStats.rawIncome,
+        'Chi phí': mStats.rawExpense,
+        'Tiết kiệm': mSavings,
+        'Còn lại': mStats.rawIncome - mStats.rawExpense - mSavings
       };
     });
 
     let totalIncome = 0;
     let totalExpense = 0;
-    let totalNet = 0;
+    let totalSavings = 0;
+    let totalRemaining = 0;
 
     monthsData.forEach(m => {
       totalIncome += m['Thu nhập'];
       totalExpense += m['Chi phí'];
-      totalNet += m['Tiết kiệm'];
+      totalSavings += m['Tiết kiệm'];
+      totalRemaining += m['Còn lại'];
     });
 
     return {
       monthsData,
       totalIncome,
       totalExpense,
-      totalNet
+      totalSavings,
+      totalRemaining
     };
-  }, [currentYear, settlementDay, transactions, calculateAdjustedStats]);
+  }, [currentYear, settlementDay, transactions, calculateAdjustedStats, getPeriodSavings]);
 
   const barData = useMemo(() => {
     return [
-      { name: 'Phân tích dòng tiền', Thu: stats.income, Chi: stats.expense }
+      { 
+        name: 'Dòng tiền chu kỳ', 
+        'Thu nhập': stats.rawIncome, 
+        'Chi phí': stats.rawExpense,
+        'Tiết kiệm': periodSavings,
+        'Còn lại': stats.rawIncome - stats.rawExpense - periodSavings
+      }
     ];
-  }, [stats]);
+  }, [stats, periodSavings]);
 
   const yearOptions = useMemo(() => {
     const currentYearVal = new Date().getFullYear();
@@ -277,20 +316,24 @@ export default function Reports({
 
       {reportType === 'month' ? (
         <>
-          {/* THREE-CARD HERO METRICS GRID */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-3xl shadow-md border-4 border-[#FFF2D8] hover:-translate-y-1 hover:shadow-lg transition-all duration-300 flex flex-col justify-center">
-              <span className="text-[10px] font-black uppercase tracking-widest text-amber-800/80 mb-1">Tổng thu nhập khả dụng 👛</span>
-              <p className="text-2xl sm:text-3xl font-black text-emerald-600 font-mono tracking-tight tabular-nums">{formatCurrency(stats.income)}</p>
+          {/* FOUR-CARD HERO METRICS GRID */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="bg-white p-5 rounded-3xl shadow-md border-4 border-[#FFF2D8] hover:-translate-y-1 hover:shadow-lg transition-all duration-300 flex flex-col justify-center">
+              <span className="text-[10px] font-black uppercase tracking-widest text-amber-800/80 mb-1">Tổng thu nhập 👛</span>
+              <p className="text-xl sm:text-2xl font-black text-emerald-600 font-mono tracking-tight tabular-nums">{formatCurrency(stats.rawIncome)}</p>
             </div>
-            <div className="bg-white p-6 rounded-3xl shadow-md border-4 border-[#FFF2D8] hover:-translate-y-1 hover:shadow-lg transition-all duration-300 flex flex-col justify-center">
-              <span className="text-[10px] font-black uppercase tracking-widest text-amber-800/80 mb-1">Tổng chi phí định lượng 🛍️</span>
-              <p className="text-2xl sm:text-3xl font-black text-rose-500 font-mono tracking-tight tabular-nums">{formatCurrency(stats.expense)}</p>
+            <div className="bg-white p-5 rounded-3xl shadow-md border-4 border-[#FFF2D8] hover:-translate-y-1 hover:shadow-lg transition-all duration-300 flex flex-col justify-center">
+              <span className="text-[10px] font-black uppercase tracking-widest text-amber-800/80 mb-1">Tổng chi tiêu 🛍️</span>
+              <p className="text-xl sm:text-2xl font-black text-rose-500 font-mono tracking-tight tabular-nums">{formatCurrency(stats.rawExpense)}</p>
             </div>
-            <div className="bg-gradient-to-br from-[#FFFDF9] to-[#FFF9E6] p-6 rounded-3xl shadow-md border-4 border-[#FFF2D8] hover:-translate-y-1 hover:shadow-lg transition-all duration-300 flex flex-col justify-center">
-              <span className="text-[10px] font-black uppercase tracking-widest text-amber-800/80 mb-1">Tích lũy thặng dư heo đất 🐖</span>
-              <p className={`text-2xl sm:text-3xl font-black font-mono tracking-tight tabular-nums ${stats.net >= 0 ? 'text-amber-950' : 'text-rose-500'}`}>
-                {formatCurrency(stats.net)}
+            <div className="bg-white p-5 rounded-3xl shadow-md border-4 border-[#FFF2D8] hover:-translate-y-1 hover:shadow-lg transition-all duration-300 flex flex-col justify-center">
+              <span className="text-[10px] font-black uppercase tracking-widest text-amber-800/80 mb-1">Gửi tiết kiệm 🐖</span>
+              <p className="text-xl sm:text-2xl font-black text-amber-600 font-mono tracking-tight tabular-nums">{formatCurrency(periodSavings)}</p>
+            </div>
+            <div className="bg-gradient-to-br from-[#FFFDF9] to-[#FFF9E6] p-5 rounded-3xl shadow-md border-4 border-[#FFF2D8] hover:-translate-y-1 hover:shadow-lg transition-all duration-300 flex flex-col justify-center">
+              <span className="text-[10px] font-black uppercase tracking-widest text-amber-800/80 mb-1">Thu nhập còn lại 🪙</span>
+              <p className={`text-xl sm:text-2xl font-black font-mono tracking-tight tabular-nums ${stats.rawIncome - stats.rawExpense - periodSavings >= 0 ? 'text-amber-950' : 'text-rose-500'}`}>
+                {formatCurrency(stats.rawIncome - stats.rawExpense - periodSavings)}
               </p>
             </div>
           </div>
@@ -388,8 +431,10 @@ export default function Reports({
                       contentStyle={{ backgroundColor: '#FFFDF9', color: '#451a03', borderRadius: '24px', border: '4px solid #FFF2D8', padding: '10px 14px', fontSize: '11px', fontWeight: '900' }}
                     />
                     <Legend iconSize={10} iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
-                    <Bar dataKey="Thu" name="Thu nhập điều chỉnh" fill="#10B981" radius={[6, 6, 0, 0]} maxBarSize={45} />
-                    <Bar dataKey="Chi" name="Chi phí thuần" fill="#F43F5E" radius={[6, 6, 0, 0]} maxBarSize={45} />
+                    <Bar dataKey="Thu nhập" fill="#10B981" radius={[6, 6, 0, 0]} maxBarSize={30} />
+                    <Bar dataKey="Chi phí" fill="#F43F5E" radius={[6, 6, 0, 0]} maxBarSize={30} />
+                    <Bar dataKey="Tiết kiệm" fill="#F59E0B" radius={[6, 6, 0, 0]} maxBarSize={30} />
+                    <Bar dataKey="Còn lại" fill="#3B82F6" radius={[6, 6, 0, 0]} maxBarSize={30} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -399,19 +444,23 @@ export default function Reports({
       ) : (
         <>
           {/* YEARLY HERO ROW */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-3xl shadow-md border-4 border-[#FFF2D8] hover:-translate-y-1 hover:shadow-lg transition-all duration-300 flex flex-col justify-center">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="bg-white p-5 rounded-3xl shadow-md border-4 border-[#FFF2D8] hover:-translate-y-1 hover:shadow-lg transition-all duration-300 flex flex-col justify-center">
               <span className="text-[10px] font-black uppercase tracking-widest text-amber-800/80 mb-1">Thu nhập cả năm ({currentYear}) 💸</span>
-              <p className="text-2xl sm:text-3xl font-black text-emerald-600 font-mono tracking-tight tabular-nums">{formatCurrency(yearlyStats.totalIncome)}</p>
+              <p className="text-xl sm:text-2xl font-black text-emerald-600 font-mono tracking-tight tabular-nums">{formatCurrency(yearlyStats.totalIncome)}</p>
             </div>
-            <div className="bg-white p-6 rounded-3xl shadow-md border-4 border-[#FFF2D8] hover:-translate-y-1 hover:shadow-lg transition-all duration-300 flex flex-col justify-center">
+            <div className="bg-white p-5 rounded-3xl shadow-md border-4 border-[#FFF2D8] hover:-translate-y-1 hover:shadow-lg transition-all duration-300 flex flex-col justify-center">
               <span className="text-[10px] font-black uppercase tracking-widest text-amber-800/80 mb-1">Chi phí cả năm ({currentYear}) 🛍️</span>
-              <p className="text-2xl sm:text-3xl font-black text-rose-500 font-mono tracking-tight tabular-nums">{formatCurrency(yearlyStats.totalExpense)}</p>
+              <p className="text-xl sm:text-2xl font-black text-rose-500 font-mono tracking-tight tabular-nums">{formatCurrency(yearlyStats.totalExpense)}</p>
             </div>
-            <div className="bg-gradient-to-br from-[#FFFDF9] to-[#FFF9E6] p-6 rounded-3xl shadow-md border-4 border-[#FFF2D8] hover:-translate-y-1 hover:shadow-lg transition-all duration-300 flex flex-col justify-center">
-              <span className="text-[10px] font-black uppercase tracking-widest text-amber-800/80 mb-1">Tích lũy heo đất cả năm 🐖</span>
-              <p className={`text-2xl sm:text-3xl font-black font-mono tracking-tight tabular-nums ${yearlyStats.totalNet >= 0 ? 'text-amber-950' : 'text-[#F0426B]'}`}>
-                {formatCurrency(yearlyStats.totalNet)}
+            <div className="bg-white p-5 rounded-3xl shadow-md border-4 border-[#FFF2D8] hover:-translate-y-1 hover:shadow-lg transition-all duration-300 flex flex-col justify-center">
+              <span className="text-[10px] font-black uppercase tracking-widest text-amber-800/80 mb-1">Tiết kiệm cả năm 🐖</span>
+              <p className="text-xl sm:text-2xl font-black text-amber-600 font-mono tracking-tight tabular-nums">{formatCurrency(yearlyStats.totalSavings)}</p>
+            </div>
+            <div className="bg-gradient-to-br from-[#FFFDF9] to-[#FFF9E6] p-5 rounded-3xl shadow-md border-4 border-[#FFF2D8] hover:-translate-y-1 hover:shadow-lg transition-all duration-300 flex flex-col justify-center">
+              <span className="text-[10px] font-black uppercase tracking-widest text-amber-800/80 mb-1">Thu nhập còn lại 🪙</span>
+              <p className={`text-xl sm:text-2xl font-black font-mono tracking-tight tabular-nums ${yearlyStats.totalRemaining >= 0 ? 'text-amber-950' : 'text-rose-500'}`}>
+                {formatCurrency(yearlyStats.totalRemaining)}
               </p>
             </div>
           </div>
@@ -420,7 +469,7 @@ export default function Reports({
           <div className="bg-white p-6 rounded-3xl shadow-md border-4 border-[#FFF2D8] hover:shadow-lg transition-all duration-300 mt-6">
             <h3 className="text-sm font-black text-amber-950 mb-6 tracking-tight flex items-center gap-1.5 uppercase">
               <BarChart3 className="w-5 h-5 text-[#FFC300]" />
-              Biến động thu chi các tháng năm {currentYear} 📈
+              Biến động dòng tiền các tháng năm {currentYear} 📈
             </h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -436,6 +485,8 @@ export default function Reports({
                   <Legend iconSize={10} iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
                   <Bar dataKey="Thu nhập" fill="#10B981" radius={[5, 5, 0, 0]} />
                   <Bar dataKey="Chi phí" fill="#F43F5E" radius={[5, 5, 0, 0]} />
+                  <Bar dataKey="Tiết kiệm" fill="#F59E0B" radius={[5, 5, 0, 0]} />
+                  <Bar dataKey="Còn lại" fill="#3B82F6" radius={[5, 5, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -452,9 +503,10 @@ export default function Reports({
                 <thead className="bg-amber-50/30">
                   <tr>
                     <th className="px-6 py-3.5 text-left text-xs font-black uppercase tracking-wider text-amber-800">Tháng</th>
-                    <th className="px-6 py-3.5 text-right text-xs font-black uppercase tracking-wider text-amber-800">Thu nhập ròng</th>
-                    <th className="px-6 py-3.5 text-right text-xs font-black uppercase tracking-wider text-amber-800">Chi phí ròng</th>
-                    <th className="px-6 py-3.5 text-right text-xs font-black uppercase tracking-wider text-amber-800">Tích lũy thặng dư</th>
+                    <th className="px-6 py-3.5 text-right text-xs font-black uppercase tracking-wider text-amber-800">Tổng thu nhập</th>
+                    <th className="px-6 py-3.5 text-right text-xs font-black uppercase tracking-wider text-amber-800">Tổng chi tiêu</th>
+                    <th className="px-6 py-3.5 text-right text-xs font-black uppercase tracking-wider text-amber-800">Gửi tiết kiệm</th>
+                    <th className="px-6 py-3.5 text-right text-xs font-black uppercase tracking-wider text-amber-800">Thu nhập còn lại</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-amber-100/60 font-mono text-xs sm:text-sm">
@@ -466,8 +518,9 @@ export default function Reports({
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-emerald-600 font-bold tabular-nums">{formatCurrency(row['Thu nhập'])}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-rose-500 font-bold tabular-nums">{formatCurrency(row['Chi phí'])}</td>
-                      <td className={`px-6 py-4 whitespace-nowrap text-right font-black tabular-nums ${row['Tiết kiệm'] >= 0 ? 'text-amber-950' : 'text-rose-500'}`}>
-                        {formatCurrency(row['Tiết kiệm'])}
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-amber-600 font-bold tabular-nums">{formatCurrency(row['Tiết kiệm'])}</td>
+                      <td className={`px-6 py-4 whitespace-nowrap text-right font-black tabular-nums ${row['Còn lại'] >= 0 ? 'text-amber-950' : 'text-rose-500'}`}>
+                        {formatCurrency(row['Còn lại'])}
                       </td>
                     </tr>
                   ))}

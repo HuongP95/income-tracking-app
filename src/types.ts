@@ -47,3 +47,13 @@ export interface CustomCycle {
   name?: string;
 }
 
+export interface SavingTransaction {
+  id?: string;
+  amount: number;
+  date: number;
+  type: 'deposit' | 'withdraw';
+  note: string;
+  cycleId?: string; // Identifies the cycle this is connected to
+}
+
+

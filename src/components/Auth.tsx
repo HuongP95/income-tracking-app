@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { motion } from 'motion/react';
 import { Coins, Sparkles, Heart, Mail, Lock, Eye, EyeOff, Smile, Flame } from 'lucide-react';
 
@@ -11,6 +11,7 @@ export default function Auth() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState('');
   const [floatingItems, setFloatingItems] = useState<Array<{ id: number; left: number; delay: number; duration: number; text: string; size: number }>>([]);
 
   // Generate falling coin/money elements for background effect
@@ -29,9 +30,31 @@ export default function Auth() {
     setFloatingItems(items);
   }, []);
 
+  const handleForgotPassword = async () => {
+    setError('');
+    setResetSuccess('');
+    if (!email.trim()) {
+      setError('Bạn vui lòng nhập Email ở trên trước rồi nhấn "Quên mật khẩu?" nhé! 💌');
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setResetSuccess('Bé Coin đã gửi liên kết đặt lại mật khẩu vào Email của bạn rồi đó! Bạn kiểm tra hộp thư (hoặc mục Spam/Rác) nha 📩✨');
+    } catch (err: any) {
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+        setError('Email này chưa được đăng ký trong hệ thống bạn ơi! 😿');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('Địa chỉ email không đúng định dạng kìa bạn ơi! 💌');
+      } else {
+        setError('Có lỗi xảy ra khi gửi email đặt lại mật khẩu: ' + err.message);
+      }
+    }
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setResetSuccess('');
     setIsSubmitting(true);
     try {
       if (isLogin) {
@@ -203,7 +226,18 @@ export default function Auth() {
 
             {/* Password Field Container */}
             <div>
-              <label className="block text-[11px] font-bold text-amber-800/80 uppercase tracking-widest mb-1.5 ml-1">Mật khẩu yêu thương 🔐</label>
+              <div className="flex justify-between items-center mb-1.5 ml-1 pr-1">
+                <label className="block text-[11px] font-bold text-amber-800/80 uppercase tracking-widest">Mật khẩu yêu thương 🔐</label>
+                {isLogin && (
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className="text-[11px] font-bold text-amber-700 hover:text-amber-900 hover:underline cursor-pointer"
+                  >
+                    Quên mật khẩu?
+                  </button>
+                )}
+              </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
                   <Lock className="h-4 w-4 text-amber-500/80" />
@@ -226,6 +260,18 @@ export default function Auth() {
               </div>
             </div>
           </div>
+
+          {/* Reset Password Success Message */}
+          {resetSuccess && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-emerald-50 border-2 border-emerald-200 p-3 rounded-2xl text-xs text-emerald-800 font-bold text-center flex items-center justify-center gap-1.5"
+            >
+              <span>📩</span>
+              <p>{resetSuccess}</p>
+            </motion.div>
+          )}
 
           {/* Error Message */}
           {error && (
@@ -270,6 +316,7 @@ export default function Auth() {
               onClick={() => {
                 setIsLogin(!isLogin);
                 setError('');
+                setResetSuccess('');
               }}
             >
               <span>{isLogin ? '🌸 Chưa có tài khoản? Đăng ký tại đây nè' : '🐾 Đã có tài khoản rồi? Đăng nhập ngay'}</span>

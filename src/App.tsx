@@ -9,11 +9,10 @@ import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import Auth from './components/Auth';
 import Dashboard from './pages/Dashboard';
 import History from './pages/History';
+import PlanAndBudget from './pages/PlanAndBudget';
+import SavingsAndDebts from './pages/SavingsAndDebts';
 import Reports from './pages/Reports';
-import Budget from './pages/Budget';
-import DebtTracker from './pages/DebtTracker';
-import MonthlyPlan from './pages/MonthlyPlan';
-import { LayoutDashboard, Receipt, PieChart, Wallet, CreditCard, LogOut, Target, Sparkles, AlertCircle, TrendingUp, Compass } from 'lucide-react';
+import { LayoutDashboard, Receipt, PiggyBank, PieChart, Target, LogOut, Sparkles, AlertCircle, TrendingUp, Compass } from 'lucide-react';
 import { cn } from './lib/utils';
 import { subscribeToSettlementConfig, subscribeToCustomCycles, subscribeToTransactions, subscribeToBudgets } from './lib/db';
 import { CustomCycle, Transaction, Budget as BudgetType } from './types';
@@ -29,6 +28,13 @@ export default function App() {
   const [customCycles, setCustomCycles] = useState<CustomCycle[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<BudgetType[]>([]);
+
+  // Gracefully handle legacy activeTab state in localStorage
+  const currentTab = (activeTab === 'plan' || activeTab === 'budget')
+    ? 'plan_budget'
+    : (activeTab === 'savings' || activeTab === 'debts')
+      ? 'savings_debts'
+      : activeTab;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -172,10 +178,9 @@ export default function App() {
   const navItems = [
     { id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
     { id: 'history', label: 'Lịch sử', icon: Receipt },
-    { id: 'plan', label: 'Kế hoạch', icon: Target },
+    { id: 'plan_budget', label: 'Kế hoạch & Ngân sách', icon: Target },
+    { id: 'savings_debts', label: 'Tiết kiệm & Nợ', icon: PiggyBank },
     { id: 'reports', label: 'Báo cáo', icon: PieChart },
-    { id: 'budget', label: 'Ngân sách', icon: Wallet },
-    { id: 'debts', label: 'Nợ & Chia', icon: CreditCard },
   ];
 
   const AdviceIcon = advice.icon;
@@ -210,7 +215,7 @@ export default function App() {
           <div className="flex flex-1 md:flex-col justify-around md:justify-start md:space-y-1.5 w-full">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = activeTab === item.id;
+              const isActive = currentTab === item.id;
               return (
                 <button
                   key={item.id}
@@ -278,19 +283,18 @@ export default function App() {
         <div className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full relative overflow-x-hidden">
           <AnimatePresence mode="wait">
             <motion.div
-              key={activeTab}
+              key={currentTab}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.18, ease: 'easeOut' }}
               className="h-full w-full"
             >
-              {activeTab === 'dashboard' && <Dashboard user={user} />}
-              {activeTab === 'history' && <History user={user} />}
-              {activeTab === 'plan' && <MonthlyPlan user={user} settlementDay={settlementConfig.settlement_day} settlementConfig={settlementConfig} customCycles={customCycles} />}
-              {activeTab === 'reports' && <Reports user={user} settlementDay={settlementConfig.settlement_day} settlementConfig={settlementConfig} customCycles={customCycles} />}
-              {activeTab === 'budget' && <Budget user={user} settlementDay={settlementConfig.settlement_day} settlementConfig={settlementConfig} customCycles={customCycles} />}
-              {activeTab === 'debts' && <DebtTracker user={user} settlementDay={settlementConfig.settlement_day} settlementConfig={settlementConfig} customCycles={customCycles} />}
+              {currentTab === 'dashboard' && <Dashboard user={user} />}
+              {currentTab === 'history' && <History user={user} />}
+              {currentTab === 'plan_budget' && <PlanAndBudget user={user} settlementDay={settlementConfig.settlement_day} settlementConfig={settlementConfig} customCycles={customCycles} />}
+              {currentTab === 'savings_debts' && <SavingsAndDebts user={user} />}
+              {currentTab === 'reports' && <Reports user={user} settlementDay={settlementConfig.settlement_day} settlementConfig={settlementConfig} customCycles={customCycles} />}
             </motion.div>
           </AnimatePresence>
         </div>

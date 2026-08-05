@@ -1,6 +1,6 @@
 import { db } from '../firebase';
 import { ref, set, push, onValue, remove, update } from 'firebase/database';
-import { Transaction, Category, Budget, DebtInstallment, CustomCycle } from '../types';
+import { Transaction, Category, Budget, DebtInstallment, CustomCycle, SavingTransaction } from '../types';
 
 export const subscribeToTransactions = (uid: string, callback: (data: Transaction[]) => void) => {
   const transactionsRef = ref(db, `transactions/${uid}`);
@@ -144,5 +144,31 @@ export const updateCustomCycle = (uid: string, id: string, cycle: Partial<Custom
 
 export const deleteCustomCycle = (uid: string, id: string) => {
   const itemRef = ref(db, `custom_cycles/${uid}/${id}`);
+  return remove(itemRef);
+};
+
+export const subscribeToSavings = (uid: string, callback: (data: SavingTransaction[]) => void) => {
+  const savingsRef = ref(db, `savings/${uid}`);
+  return onValue(savingsRef, (snapshot) => {
+    const data = snapshot.val();
+    if (!data) return callback([]);
+    const formatted = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+    callback(formatted.sort((a, b) => b.date - a.date)); // descending date order
+  });
+};
+
+export const addSavingTransaction = (uid: string, transaction: Omit<SavingTransaction, 'id'>) => {
+  const listRef = ref(db, `savings/${uid}`);
+  const newRef = push(listRef);
+  return set(newRef, transaction);
+};
+
+export const updateSavingTransaction = (uid: string, id: string, transaction: Partial<SavingTransaction>) => {
+  const itemRef = ref(db, `savings/${uid}/${id}`);
+  return update(itemRef, transaction);
+};
+
+export const deleteSavingTransaction = (uid: string, id: string) => {
+  const itemRef = ref(db, `savings/${uid}/${id}`);
   return remove(itemRef);
 };

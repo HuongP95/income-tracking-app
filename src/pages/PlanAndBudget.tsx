@@ -132,8 +132,6 @@ export default function PlanAndBudget({
     }, {} as Record<string, BudgetType>);
   }, [budgets]);
 
-  const [showFormulaTooltip, setShowFormulaTooltip] = useState(false);
-
   const expenseCategories = useMemo(() => {
     return categories.filter(c => 
       c.type === 'expense' && 
@@ -295,20 +293,11 @@ export default function PlanAndBudget({
           </div>
         </div>
 
-        {/* 3 SUMMARY METRICS HEADER & ICON BUTTON */}
+        {/* 3 SUMMARY METRICS HEADER */}
         <div className="flex items-center justify-between">
           <span className="text-xs font-black uppercase tracking-widest text-amber-900">
             Tổng quan các chỉ số ngân sách
           </span>
-          <button
-            type="button"
-            onClick={() => setShowFormulaTooltip(!showFormulaTooltip)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-100/80 hover:bg-amber-200 text-amber-950 text-xs font-black transition-all cursor-pointer border border-amber-300/80 shadow-xs"
-            title="Xem công thức tính chi tiết"
-          >
-            <Info className="w-4 h-4 text-amber-700" />
-            <span>Công thức tính (!)</span>
-          </button>
         </div>
 
         {/* 3 SUMMARY METRICS */}
@@ -361,44 +350,33 @@ export default function PlanAndBudget({
           </div>
         </div>
 
-        {/* Formula Explanation Tooltip / Popover (Shown on clicking (!)) */}
-        {showFormulaTooltip && (
-          <div className="bg-amber-50/95 p-4 rounded-2xl border-2 border-amber-300 text-xs text-amber-950 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200 shadow-md">
-            <div className="font-black text-amber-900 flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <Info className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Chi tiết công thức tính các chỉ số ngân sách:</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowFormulaTooltip(false)}
-                className="text-amber-700 hover:text-amber-950 font-black text-xs px-2 py-0.5 rounded-lg bg-amber-200/50 hover:bg-amber-200"
-              >
-                Đóng ✖
-              </button>
+        {/* Formula Explanation Banner - Permanently visible for user clarity */}
+        <div className="bg-amber-50/95 p-4 rounded-2xl border-2 border-amber-300/90 text-xs text-amber-950 space-y-2 shadow-xs">
+          <div className="font-black text-amber-900 flex items-center gap-1.5">
+            <Info className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>Công thức tính các chỉ số ngân sách:</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-[11px] font-medium pt-1">
+            <div className="bg-white/90 p-3 rounded-xl border border-amber-200 shadow-xs">
+              <p className="font-black text-amber-900 mb-1">1. Tổng ngân sách kế hoạch</p>
+              <p className="text-amber-800/90 leading-relaxed">
+                Bằng tổng các hạn mức chi tiêu bạn thiết lập cho từng danh mục = <strong>∑(Hạn mức các danh mục)</strong>.
+              </p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-[11px] font-medium pt-1">
-              <div className="bg-white/90 p-3 rounded-xl border border-amber-200 shadow-xs">
-                <p className="font-black text-amber-900 mb-1">1. Tổng ngân sách kế hoạch</p>
-                <p className="text-amber-800/90 leading-relaxed">
-                  Bằng tổng các hạn mức chi tiêu bạn thiết lập cho từng danh mục bên dưới = <strong>∑(Hạn mức các danh mục)</strong>.
-                </p>
-              </div>
-              <div className="bg-white/90 p-3 rounded-xl border border-amber-200 shadow-xs">
-                <p className="font-black text-rose-900 mb-1">2. Thực tế đã chi</p>
-                <p className="text-rose-800/90 leading-relaxed">
-                  Bằng tổng tất cả các khoản chi tiêu thực tế bạn đã ghi chép ở mục Lịch sử trong chu kỳ này = <strong>∑(Giao dịch Chi)</strong>.
-                </p>
-              </div>
-              <div className="bg-white/90 p-3 rounded-xl border border-amber-200 shadow-xs">
-                <p className="font-black text-emerald-900 mb-1">3. Chênh lệch (Còn dư)</p>
-                <p className="text-emerald-800/90 leading-relaxed">
-                  Bằng <strong>[Tổng ngân sách kế hoạch] − [Thực tế đã chi]</strong>. Số Dương = Còn dư hạn mức; Số Âm = Đã chi vượt ngân sách.
-                </p>
-              </div>
+            <div className="bg-white/90 p-3 rounded-xl border border-amber-200 shadow-xs">
+              <p className="font-black text-rose-900 mb-1">2. Thực tế đã chi</p>
+              <p className="text-rose-800/90 leading-relaxed">
+                Bằng tổng tất cả các khoản chi tiêu thực tế bạn đã ghi chép ở mục Lịch sử trong chu kỳ này = <strong>∑(Giao dịch Chi)</strong>.
+              </p>
+            </div>
+            <div className="bg-white/90 p-3 rounded-xl border border-amber-200 shadow-xs">
+              <p className="font-black text-emerald-900 mb-1">3. Chênh lệch (Còn dư)</p>
+              <p className="text-emerald-800/90 leading-relaxed">
+                Bằng <strong>[Tổng ngân sách kế hoạch] − [Thực tế đã chi]</strong>. Số Dương = Còn dư hạn mức; Số Âm = Đã chi vượt ngân sách.
+              </p>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* SECTION: CATEGORY BUDGET COMPARISON & INPUT TABLE */}

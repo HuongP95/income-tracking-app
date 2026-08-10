@@ -10,7 +10,7 @@ import {
 } from '../lib/db';
 import { Transaction, Category, TransactionType } from '../types';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
-import { Trash2, Edit2, Search, Filter, Calendar, Tag, X, Plus, Loader2 } from 'lucide-react';
+import { Trash2, Edit2, Search, Filter, Calendar, Tag, X, Plus, Loader2, PlusCircle, Layers, ChevronDown, ChevronUp } from 'lucide-react';
 import * as Icons from 'lucide-react';
 import { formatCurrency, formatNumberInput, parseNumberInput } from '../lib/utils';
 import { useFeedback } from '../context/FeedbackContext';
@@ -131,6 +131,14 @@ export default function History({ user }: { user: User }) {
     return amountTouched && (parsedAmount <= 0 || isNaN(parsedAmount));
   }, [amountTouched, parsedAmount]);
 
+  // Add transaction popup modal & state
+  const [showAddTxModal, setShowAddTxModal] = useState(false);
+  const [expandedKeys, setExpandedKeys] = useState<Record<string, boolean>>({});
+
+  const toggleExpandGroup = (key: string) => {
+    setExpandedKeys(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
   const handleAddTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     setAmountTouched(true);
@@ -153,6 +161,7 @@ export default function History({ user }: { user: User }) {
       setAmount('');
       setNote('');
       setAmountTouched(false);
+      setShowAddTxModal(false);
       showToast('Ghi nhận giao dịch thành công!', 'success');
     } catch (err) {
       console.error(err);
@@ -166,7 +175,7 @@ export default function History({ user }: { user: User }) {
     e.preventDefault();
     if (!newCatName) return;
     try {
-      await addCategory(user.uid, {
+      const createdCatId = await addCategory(user.uid, {
         name: newCatName,
         type: newCatType,
         icon: newCatIcon,
@@ -174,6 +183,9 @@ export default function History({ user }: { user: User }) {
       });
       setShowCategoryModal(false);
       setNewCatName('');
+      if (createdCatId) {
+        setCategoryId(createdCatId);
+      }
       showToast('Đã thêm danh mục mới!', 'success');
     } catch (err) {
       showToast('Lỗi khi thêm danh mục.', 'error');
@@ -290,6 +302,50 @@ export default function History({ user }: { user: User }) {
     });
   }, [transactions, selectedType, selectedCategory, fromDate, toDate, debouncedSearch, catMap]);
 
+  // Group same-day, same-category transactions together
+  const groupedTransactions = useMemo(() => {
+    const map = new Map<string, {
+      key: string;
+      dateStr: string;
+      timestamp: number;
+      category_id: string;
+      type: TransactionType;
+      totalAmount: number;
+      items: Transaction[];
+      notesStr: string;
+    }>();
+
+    for (const t of filtered) {
+      const dateStr = format(new Date(t.date), 'yyyy-MM-dd');
+      const key = `${dateStr}_${t.category_id}_${t.type}`;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          dateStr,
+          timestamp: t.date,
+          category_id: t.category_id,
+          type: t.type,
+          totalAmount: 0,
+          items: [],
+          notesStr: ''
+        });
+      }
+
+      const grp = map.get(key)!;
+      grp.totalAmount += t.amount;
+      grp.items.push(t);
+    }
+
+    const result = Array.from(map.values());
+    for (const grp of result) {
+      const notes = Array.from(new Set(grp.items.map(i => i.note?.trim()).filter(Boolean)));
+      grp.notesStr = notes.join(', ');
+    }
+
+    return result.sort((a, b) => b.timestamp - a.timestamp);
+  }, [filtered]);
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -307,151 +363,185 @@ export default function History({ user }: { user: User }) {
 
   return (
     <div className="space-y-8">
-      {/* PAGE TITLE */}
-      <div>
-        <h1 className="text-3xl font-black tracking-tight text-amber-950 leading-none flex items-center gap-2">
-          Lịch sử giao dịch <span className="text-2xl">📜</span>
-        </h1>
-        <p className="text-xs sm:text-sm text-amber-800/80 font-bold mt-1.5">
-          Ghi chép giao dịch thu chi mới và tra cứu lại lịch sử tiện lợi cùng bé Coin nha! ✨
-        </p>
+      {/* PAGE HEADER WITH ACTION BUTTON */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-[#FFFBEB] via-[#FFFBEB] to-[#FEF3C7] p-6 rounded-3xl border-4 border-[#FFF2D8] shadow-sm">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-amber-950 leading-none flex items-center gap-2">
+            Lịch sử giao dịch <span className="text-2xl">📜</span>
+          </h1>
+          <p className="text-xs sm:text-sm text-amber-800/80 font-bold mt-1.5">
+            Ghi chép giao dịch thu chi mới và tra cứu lại lịch sử tiện lợi cùng bé Coin nha! ✨
+          </p>
+        </div>
+
+        <button
+          onClick={() => setShowAddTxModal(true)}
+          className="flex items-center justify-center gap-2 bg-gradient-to-r from-[#FFD000] to-[#FFB700] hover:from-[#FFD61A] hover:to-[#FFC41A] text-amber-950 px-6 py-3.5 rounded-2xl text-sm font-black border-b-4 border-amber-600 shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shrink-0"
+        >
+          <PlusCircle className="w-5 h-5 text-amber-950" />
+          <span>Ghi chép giao dịch mới 📝</span>
+        </button>
       </div>
 
-      {/* SECTION 1: CORE LOGGING FORM AT THE TOP ("Ghi chép giao dịch mới") */}
-      <section className="bg-white p-6 sm:p-8 rounded-3xl shadow-lg shadow-amber-150/10 border-4 border-[#FFF2D8] transition-all duration-300">
-        <h2 className="text-lg font-black text-amber-950 mb-4 flex items-center gap-1.5">
-          Ghi chép giao dịch mới 📝
-        </h2>
-        <form onSubmit={handleAddTransaction} className="space-y-5">
-          {/* Tab Selector for Income/Expense */}
-          <div className="flex bg-amber-50/50 p-1 rounded-xl border border-amber-100 max-w-md">
-            <button
-              type="button"
-              onClick={() => setType('expense')}
-              className={`flex-1 py-2.5 text-xs font-black rounded-lg transition-all cursor-pointer ${
-                type === 'expense' 
-                  ? 'bg-rose-100/90 shadow-sm text-rose-700 border border-rose-200/50' 
-                  : 'text-amber-800/70 hover:text-amber-950'
-              }`}
-            >
-              💸 Chi phí
-            </button>
-            <button
-              type="button"
-              onClick={() => setType('income')}
-              className={`flex-1 py-2.5 text-xs font-black rounded-lg transition-all cursor-pointer ${
-                type === 'income' 
-                  ? 'bg-emerald-100/90 shadow-sm text-emerald-700 border border-emerald-200/50' 
-                  : 'text-amber-800/70 hover:text-amber-950'
-              }`}
-            >
-              💰 Thu nhập
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Amount Field */}
-            <div>
-              <label className="block text-xs font-black uppercase tracking-widest text-amber-800/80 mb-1.5 ml-1">
-                Số tiền giao dịch 💰
-              </label>
-              <input
-                type="text"
-                required
-                value={amount}
-                onChange={(e) => setAmount(formatNumberInput(e.target.value))}
-                onBlur={() => setAmountTouched(true)}
-                className={`block w-full rounded-2xl border-2 py-2.5 px-3.5 text-slate-900 bg-[#FFFDF9] placeholder:text-amber-600/30 focus:border-[#FFC300] focus:ring-0 focus:outline-none text-sm font-mono font-bold tabular-nums transition-all ${
-                  isAmountInvalid ? 'border-rose-300' : 'border-amber-100'
-                }`}
-                placeholder="Ví dụ: 50,000"
-              />
-              {isAmountInvalid && (
-                <p className="text-[11px] font-bold text-rose-600 mt-1 flex items-center gap-1 animate-pulse ml-1">
-                  <span>😿 Số tiền phải lớn hơn 0 VND nha!</span>
-                </p>
-              )}
+      {/* POP-UP MODAL FOR ADDING NEW TRANSACTION */}
+      {showAddTxModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-[#3A2A1A]/40 backdrop-blur-sm" onClick={() => setShowAddTxModal(false)} />
+          <div className="relative bg-white rounded-3xl p-6 sm:p-8 w-full max-w-lg shadow-2xl border-4 border-[#FFF2D8] overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-amber-100">
+              <h2 className="text-lg font-black text-amber-950 flex items-center gap-1.5">
+                Ghi chép giao dịch mới 📝
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowAddTxModal(false)}
+                className="p-1.5 text-amber-700 hover:text-amber-950 hover:bg-amber-100 rounded-xl transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            {/* Category Dropdown */}
-            <div>
-              <div className="flex justify-between items-center mb-1.5">
-                <label className="block text-xs font-black uppercase tracking-widest text-amber-800/80 ml-1">
-                  Danh mục 🐾
-                </label>
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    setNewCatType(type);
-                    setShowCategoryModal(true);
-                  }} 
-                  className="text-[11px] font-extrabold text-amber-700 hover:text-amber-900 flex items-center cursor-pointer transition-colors"
+            <form onSubmit={handleAddTransaction} className="space-y-5">
+              {/* Tab Selector for Income/Expense */}
+              <div className="flex bg-amber-50/50 p-1 rounded-xl border border-amber-100">
+                <button
+                  type="button"
+                  onClick={() => setType('expense')}
+                  className={`flex-1 py-2.5 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                    type === 'expense' 
+                      ? 'bg-rose-100/90 shadow-sm text-rose-700 border border-rose-200/50' 
+                      : 'text-amber-800/70 hover:text-amber-950'
+                  }`}
                 >
-                  <Plus className="w-3 h-3 mr-0.5 stroke-[3]" /> Thêm danh mục
+                  💸 Chi phí
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setType('income')}
+                  className={`flex-1 py-2.5 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                    type === 'income' 
+                      ? 'bg-emerald-100/90 shadow-sm text-emerald-700 border border-emerald-200/50' 
+                      : 'text-amber-800/70 hover:text-amber-950'
+                  }`}
+                >
+                  💰 Thu nhập
                 </button>
               </div>
-              <select
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                required
-                className="block w-full rounded-2xl border-2 border-amber-100 bg-[#FFFDF9] py-2.5 px-3.5 text-slate-800 focus:border-[#FFC300] focus:ring-0 focus:outline-none text-sm font-semibold transition-all cursor-pointer"
-              >
-                <option value="" disabled>Chọn danh mục nè</option>
-                {filteredCategoriesForAdd.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
-              </select>
-            </div>
 
-            {/* Date Field */}
-            <div>
-              <label className="block text-xs font-black uppercase tracking-widest text-amber-800/80 mb-1.5 ml-1">
-                Ngày ghi nhận 📅
-              </label>
-              <input
-                type="date"
-                required
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="block w-full rounded-2xl border-2 border-amber-100 bg-[#FFFDF9] py-2.5 px-3.5 text-slate-800 focus:border-[#FFC300] focus:ring-0 focus:outline-none text-sm font-semibold transition-all cursor-pointer"
-              />
-            </div>
+              <div className="space-y-4">
+                {/* Amount Field */}
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-widest text-amber-800/80 mb-1.5 ml-1">
+                    Số tiền giao dịch 💰
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={amount}
+                    onChange={(e) => setAmount(formatNumberInput(e.target.value))}
+                    onBlur={() => setAmountTouched(true)}
+                    className={`block w-full rounded-2xl border-2 py-2.5 px-3.5 text-slate-900 bg-[#FFFDF9] placeholder:text-amber-600/30 focus:border-[#FFC300] focus:ring-0 focus:outline-none text-sm font-mono font-bold tabular-nums transition-all ${
+                      isAmountInvalid ? 'border-rose-300' : 'border-amber-100'
+                    }`}
+                    placeholder="Ví dụ: 50,000"
+                  />
+                  {isAmountInvalid && (
+                    <p className="text-[11px] font-bold text-rose-600 mt-1 flex items-center gap-1 animate-pulse ml-1">
+                      <span>😿 Số tiền phải lớn hơn 0 VND nha!</span>
+                    </p>
+                  )}
+                </div>
+
+                {/* Category Dropdown */}
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-xs font-black uppercase tracking-widest text-amber-800/80 ml-1">
+                      Danh mục 🐾
+                    </label>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setNewCatType(type);
+                        setShowCategoryModal(true);
+                      }} 
+                      className="text-[11px] font-extrabold text-amber-700 hover:text-amber-900 flex items-center cursor-pointer transition-colors"
+                    >
+                      <Plus className="w-3 h-3 mr-0.5 stroke-[3]" /> Thêm danh mục
+                    </button>
+                  </div>
+                  <select
+                    value={categoryId}
+                    onChange={(e) => setCategoryId(e.target.value)}
+                    required
+                    className="block w-full rounded-2xl border-2 border-amber-100 bg-[#FFFDF9] py-2.5 px-3.5 text-slate-800 focus:border-[#FFC300] focus:ring-0 focus:outline-none text-sm font-semibold transition-all cursor-pointer"
+                  >
+                    <option value="" disabled>Chọn danh mục nè</option>
+                    {filteredCategoriesForAdd.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Date Field */}
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-widest text-amber-800/80 mb-1.5 ml-1">
+                    Ngày ghi nhận 📅
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="block w-full rounded-2xl border-2 border-amber-100 bg-[#FFFDF9] py-2.5 px-3.5 text-slate-800 focus:border-[#FFC300] focus:ring-0 focus:outline-none text-sm font-semibold transition-all cursor-pointer"
+                  />
+                </div>
+
+                {/* Note Field */}
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-widest text-amber-800/80 mb-1.5 ml-1">
+                    Ghi chú thêm ✍️
+                  </label>
+                  <input
+                    type="text"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    className="block w-full rounded-2xl border-2 border-amber-100 bg-[#FFFDF9] py-2.5 px-3.5 text-slate-800 focus:border-[#FFC300] focus:ring-0 focus:outline-none text-sm font-semibold transition-all"
+                    placeholder="Khoản này cho việc gì thế nhỉ?"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-amber-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddTxModal(false)}
+                  className="px-4 py-2.5 text-sm font-bold text-amber-800 hover:bg-amber-50 rounded-2xl transition-all cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className={`flex items-center justify-center gap-2 rounded-2xl py-2.5 px-6 text-sm font-black transition-all border-b-4 border-amber-600 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed ${
+                    isSubmitting 
+                      ? 'bg-slate-300 border-slate-400 text-slate-600' 
+                      : 'bg-gradient-to-r from-[#FFD000] to-[#FFB700] hover:from-[#FFD61A] hover:to-[#FFC41A] text-amber-950 shadow-md shadow-amber-200/50 hover:shadow-lg'
+                  }`}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Đang lưu...</span>
+                    </>
+                  ) : (
+                    <span>Lưu giao dịch ngay ✨</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
-
-          {/* Note Field */}
-          <div>
-            <label className="block text-xs font-black uppercase tracking-widest text-amber-800/80 mb-1.5 ml-1">
-              Ghi chú thêm ✍️
-            </label>
-            <input
-              type="text"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="block w-full rounded-2xl border-2 border-amber-100 bg-[#FFFDF9] py-2.5 px-3.5 text-slate-800 focus:border-[#FFC300] focus:ring-0 focus:outline-none text-sm font-semibold transition-all"
-              placeholder="Khoản này cho việc gì thế nhỉ?"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className={`w-full sm:w-auto flex items-center justify-center gap-2 rounded-2xl py-3 px-6 text-sm font-black transition-all border-b-4 border-amber-600 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed ${
-              isSubmitting 
-                ? 'bg-slate-300 border-slate-400 text-slate-600' 
-                : 'bg-gradient-to-r from-[#FFD000] to-[#FFB700] hover:from-[#FFD61A] hover:to-[#FFC41A] text-amber-950 shadow-md shadow-amber-200/50 hover:shadow-lg'
-            }`}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Đang lưu...</span>
-              </>
-            ) : (
-              <span>+ Lưu giao dịch ngay! ✨</span>
-            )}
-          </button>
-        </form>
-      </section>
+        </div>
+      )}
 
       {/* SECTION 2: LIST OF ADDED TRANSACTIONS WITH ADVANCED FILTER BAR */}
       <section className="space-y-4">
@@ -615,66 +705,134 @@ export default function History({ user }: { user: User }) {
         {/* TRANSACTION ITEMS LIST */}
         <div className="bg-white rounded-3xl shadow-lg shadow-amber-150/5 border-4 border-[#FFF2D8] overflow-hidden">
           <div className="divide-y divide-amber-100/50">
-            {filtered.length === 0 ? (
+            {groupedTransactions.length === 0 ? (
               <div className="p-12 text-center text-amber-800 flex flex-col items-center justify-center gap-3">
                 <span className="text-4xl">🐾</span>
                 <div>
                   <p className="font-black text-amber-950">Chưa có giao dịch nào phù hợp</p>
-                  <p className="text-xs text-amber-700/70 mt-1">Hãy nhập giao dịch mới ở biểu mẫu phía trên hoặc xóa bớt bộ lọc nhé!</p>
+                  <p className="text-xs text-amber-700/70 mt-1">Hãy bấm nút "Ghi chép giao dịch mới" ở trên để tạo mới hoặc điều chỉnh bộ lọc nhé!</p>
                 </div>
               </div>
             ) : (
-              filtered.map((t) => {
-                const cat = catMap[t.category_id];
+              groupedTransactions.map((grp) => {
+                const cat = catMap[grp.category_id];
                 const Icon = cat && Icons[cat.icon as keyof typeof Icons] ? (Icons[cat.icon as keyof typeof Icons] as any) : Icons.Circle;
+                const isGroupedMultiple = grp.items.length > 1;
+                const isExpanded = !!expandedKeys[grp.key];
+
                 return (
-                  <div key={t.id} className="p-4 sm:p-5 flex items-center justify-between hover:bg-[#FFFDF9] transition-colors group gap-3">
-                    <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
-                      <div 
-                        className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-sm border border-white"
-                        style={{ backgroundColor: `${cat?.color || '#ffd000'}15`, color: cat?.color || '#b45309' }}
-                      >
-                        <Icon className="w-5.5 h-5.5 stroke-[2.25]" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-extrabold text-amber-950 tracking-tight leading-snug truncate">{cat?.name || 'Không rõ danh mục'}</p>
-                        <div className="flex items-center text-[11px] text-amber-800/60 space-x-2 mt-0.5 font-bold min-w-0">
-                          <span className="flex items-center gap-1 shrink-0">
-                            <Calendar className="w-3 h-3 text-amber-500/50" />
-                            {format(new Date(t.date), 'dd/MM/yyyy')}
-                          </span>
-                          {t.note && (
-                            <>
-                              <span className="text-amber-200 shrink-0">&bull;</span>
-                              <span className="truncate text-amber-900/80 font-semibold">{t.note}</span>
-                            </>
-                          )}
+                  <div key={grp.key} className="transition-colors group divide-y divide-amber-100/60">
+                    {/* Main Group Row */}
+                    <div className="p-4 sm:p-5 flex items-center justify-between hover:bg-[#FFFDF9] gap-3">
+                      <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
+                        <div 
+                          className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-sm border border-white"
+                          style={{ backgroundColor: `${cat?.color || '#ffd000'}15`, color: cat?.color || '#b45309' }}
+                        >
+                          <Icon className="w-5.5 h-5.5 stroke-[2.25]" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-extrabold text-amber-950 tracking-tight leading-snug truncate">
+                              {cat?.name || 'Không rõ danh mục'}
+                            </p>
+                            {isGroupedMultiple && (
+                              <span className="bg-amber-100/90 text-amber-900 border border-amber-300/60 text-[10px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                                <Layers className="w-3 h-3 text-amber-700 shrink-0" />
+                                {grp.items.length} mục đã cộng gộp
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center text-[11px] text-amber-800/60 space-x-2 mt-0.5 font-bold min-w-0">
+                            <span className="flex items-center gap-1 shrink-0">
+                              <Calendar className="w-3 h-3 text-amber-500/50" />
+                              {format(new Date(grp.timestamp), 'dd/MM/yyyy')}
+                            </span>
+                            {grp.notesStr && (
+                              <>
+                                <span className="text-amber-200 shrink-0">&bull;</span>
+                                <span className="truncate text-amber-900/80 font-semibold">{grp.notesStr}</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center space-x-2 sm:space-x-4 shrink-0">
-                      <span className={`font-bold font-mono tracking-tight text-sm sm:text-base tabular-nums shrink-0 ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
-                      </span>
-                      
-                      {/* Action buttons on hover */}
-                      <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
-                        <button 
-                          onClick={() => handleStartEdit(t)}
-                          className="p-1.5 text-amber-700/60 hover:text-amber-900 hover:bg-amber-100/50 rounded-lg transition-all cursor-pointer"
-                          title="Sửa giao dịch"
-                        >
-                          <Edit2 className="w-4 h-4 stroke-[2.5]" />
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(t)}
-                          className="p-1.5 text-rose-500/60 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
-                          title="Xóa giao dịch"
-                        >
-                          <Trash2 className="w-4 h-4 stroke-[2.5]" />
-                        </button>
+
+                      <div className="flex items-center space-x-2 sm:space-x-4 shrink-0">
+                        <span className={`font-bold font-mono tracking-tight text-sm sm:text-base tabular-nums shrink-0 ${grp.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {grp.type === 'income' ? '+' : '-'}{formatCurrency(grp.totalAmount)}
+                        </span>
+                        
+                        {/* If single item: direct edit/delete. If multiple: toggle expansion */}
+                        {!isGroupedMultiple ? (
+                          <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
+                            <button 
+                              onClick={() => handleStartEdit(grp.items[0])}
+                              className="p-1.5 text-amber-700/60 hover:text-amber-900 hover:bg-amber-100/50 rounded-lg transition-all cursor-pointer"
+                              title="Sửa giao dịch"
+                            >
+                              <Edit2 className="w-4 h-4 stroke-[2.5]" />
+                            </button>
+                            <button 
+                              onClick={() => handleDelete(grp.items[0])}
+                              className="p-1.5 text-rose-500/60 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+                              title="Xóa giao dịch"
+                            >
+                              <Trash2 className="w-4 h-4 stroke-[2.5]" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => toggleExpandGroup(grp.key)}
+                            className="p-1.5 sm:px-2.5 sm:py-1.5 bg-amber-100/80 hover:bg-amber-200/90 text-amber-950 rounded-xl text-xs font-black flex items-center gap-1 transition-all cursor-pointer border border-amber-300/80 shadow-2xs"
+                            title={isExpanded ? "Thu gọn chi tiết" : "Xem chi tiết các giao dịch gộp"}
+                          >
+                            <span className="hidden sm:inline">{isExpanded ? 'Thu gọn' : 'Chi tiết'}</span>
+                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </button>
+                        )}
                       </div>
                     </div>
+
+                    {/* Expandable sub-items when aggregated */}
+                    {isGroupedMultiple && isExpanded && (
+                      <div className="bg-amber-50/50 p-3 sm:px-6 space-y-2">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-amber-800/80 mb-1.5">
+                          Chi tiết {grp.items.length} khoản trong ngày:
+                        </p>
+                        {grp.items.map((subTx, idx) => (
+                          <div key={subTx.id || idx} className="bg-white p-3 rounded-2xl border border-amber-200/80 flex items-center justify-between text-xs font-semibold shadow-2xs">
+                            <div className="min-w-0 flex-1 pr-2">
+                              <p className="font-bold text-amber-950 truncate">{subTx.note || 'Không có ghi chú'}</p>
+                              <p className="text-[10px] text-amber-700/60 font-mono mt-0.5">
+                                {format(new Date(subTx.date), 'dd/MM/yyyy HH:mm')}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span className={`font-mono font-bold ${subTx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {subTx.type === 'income' ? '+' : '-'}{formatCurrency(subTx.amount)}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <button 
+                                  onClick={() => handleStartEdit(subTx)}
+                                  className="p-1 text-amber-700/70 hover:text-amber-950 hover:bg-amber-100 rounded-md transition-all cursor-pointer"
+                                  title="Sửa khoản này"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button 
+                                  onClick={() => handleDelete(subTx)}
+                                  className="p-1 text-rose-500/70 hover:text-rose-800 hover:bg-rose-100 rounded-md transition-all cursor-pointer"
+                                  title="Xóa khoản này"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -778,6 +936,116 @@ export default function History({ user }: { user: User }) {
                   className="px-5 py-2.5 text-sm font-black text-amber-950 bg-gradient-to-r from-[#FFD000] to-[#FFB700] hover:from-[#FFD61A] hover:to-[#FFC41A] rounded-2xl shadow-sm border-b-2 border-amber-600 hover:scale-[1.02] transition-all flex items-center gap-1 cursor-pointer"
                 >
                   {isSaving ? 'Đợi bé...' : 'Lưu lại nè! ✨'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD CATEGORY MODAL DIALOG OVERLAY */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-[#3A2A1A]/40 backdrop-blur-sm" onClick={() => setShowCategoryModal(false)} />
+          <div className="relative bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border-4 border-[#FFF2D8] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <h3 className="text-lg font-black text-amber-950 mb-4 tracking-tight leading-none">Thêm danh mục mới 🐾</h3>
+            
+            <form onSubmit={handleAddCategory} className="space-y-4">
+              {/* Type selector */}
+              <div className="flex bg-amber-50/50 p-1 rounded-xl border border-amber-100">
+                <button
+                  type="button"
+                  onClick={() => setNewCatType('expense')}
+                  className={`flex-1 py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                    newCatType === 'expense' 
+                      ? 'bg-rose-100/90 text-rose-700 border border-rose-200/50 shadow-sm' 
+                      : 'text-amber-800/70 hover:text-amber-950'
+                  }`}
+                >
+                  💸 Chi phí
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewCatType('income')}
+                  className={`flex-1 py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                    newCatType === 'income' 
+                      ? 'bg-emerald-100/90 text-emerald-700 border border-emerald-200/50 shadow-sm' 
+                      : 'text-amber-800/70 hover:text-amber-950'
+                  }`}
+                >
+                  💰 Thu nhập
+                </button>
+              </div>
+
+              {/* Name field */}
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-amber-800/80 mb-1.5 ml-1">Tên danh mục ✨</label>
+                <input
+                  type="text"
+                  required
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  className="block w-full rounded-2xl border-2 border-amber-100 bg-[#FFFDF9] py-2.5 px-3.5 text-slate-850 focus:border-[#FFC300] focus:ring-0 focus:outline-none text-sm font-semibold"
+                  placeholder="Ví dụ: Ăn uống, Giải trí, Thưởng..."
+                />
+              </div>
+
+              {/* Color selector */}
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-amber-800/80 mb-1.5 ml-1">Màu sắc đại diện 🎨</label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {['#FFD000', '#FF5722', '#4CAF50', '#2196F3', '#9C27B0', '#E91E63', '#FF9800', '#00BCD4', '#795548', '#607D8B'].map(color => (
+                    <button
+                      type="button"
+                      key={color}
+                      onClick={() => setNewCatColor(color)}
+                      className={`w-7 h-7 rounded-full transition-transform cursor-pointer border-2 ${
+                        newCatColor === color ? 'scale-125 border-slate-900 shadow-sm' : 'border-transparent hover:scale-110'
+                      }`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Icon selector */}
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-amber-800/80 mb-1.5 ml-1">Icon minh họa 🖼️</label>
+                <div className="grid grid-cols-8 gap-2 p-2 bg-amber-50/50 rounded-2xl border border-amber-100/80 max-h-32 overflow-y-auto">
+                  {['ShoppingCart', 'Utensils', 'Coffee', 'Car', 'Home', 'Heart', 'Gift', 'Briefcase', 'Film', 'PiggyBank', 'Smile', 'Tag', 'Zap', 'BookOpen', 'Music', 'Plane'].map(iconName => {
+                    const IconComp = (Icons as any)[iconName] || Icons.Tag;
+                    const isSelected = newCatIcon === iconName;
+                    return (
+                      <button
+                        type="button"
+                        key={iconName}
+                        onClick={() => setNewCatIcon(iconName)}
+                        className={`p-2 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                          isSelected 
+                            ? 'bg-amber-300 text-amber-950 font-black shadow-xs scale-105' 
+                            : 'bg-white text-amber-800/70 hover:bg-amber-100'
+                        }`}
+                      >
+                        <IconComp className="w-4 h-4" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-amber-100/50">
+                <button 
+                  type="button" 
+                  onClick={() => setShowCategoryModal(false)} 
+                  className="px-4 py-2.5 text-sm font-bold text-amber-800 hover:bg-amber-50 rounded-2xl transition-all cursor-pointer"
+                >
+                  Hủy nha
+                </button>
+                <button 
+                  type="submit" 
+                  className="px-5 py-2.5 text-sm font-black text-amber-950 bg-gradient-to-r from-[#FFD000] to-[#FFB700] hover:from-[#FFD61A] hover:to-[#FFC41A] rounded-2xl shadow-sm border-b-2 border-amber-600 hover:scale-[1.02] transition-all cursor-pointer"
+                >
+                  Thêm danh mục ngay ✨
                 </button>
               </div>
             </form>

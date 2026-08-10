@@ -110,14 +110,14 @@ export default function Dashboard({
       }
     });
 
-    const adjustedBalance = cashStats.balance - outstandingDebts;
+    const adjustedBalance = cashStats.balance - totalSavingsBalance - outstandingDebts;
 
     return {
       outstandingLoans,
       outstandingDebts,
       adjustedBalance
     };
-  }, [debts, transactions, cashStats]);
+  }, [debts, transactions, cashStats, totalSavingsBalance]);
 
   // Budget Overruns calculation
   const budgetOverruns = useMemo(() => {
@@ -234,7 +234,7 @@ export default function Dashboard({
           </div>
           <p className="text-[10px] text-amber-900/90 mt-3 flex items-center gap-1.5 leading-tight relative z-10 font-bold">
             <Info className="w-3.5 h-3.5 shrink-0 text-amber-600" />
-            <span>Đã khấu trừ các khoản công nợ.</span>
+            <span>Đã khấu trừ khoản tiết kiệm & công nợ.</span>
           </p>
         </div>
 

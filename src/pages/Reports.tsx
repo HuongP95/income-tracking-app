@@ -4,7 +4,7 @@ import { subscribeToTransactions, subscribeToCategories, subscribeToSavings } fr
 import { Transaction, Category, CustomCycle, SavingTransaction } from '../types';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { format, isWithinInterval } from 'date-fns';
-import { formatCurrency, getSettlementPeriod, getCurrentPeriod } from '../lib/utils';
+import { formatCurrency, getSettlementPeriod, getCurrentPeriod, isDateWithinIntervalSafely } from '../lib/utils';
 import { Calendar, HelpCircle, BarChart3, TrendingUp, Sparkles, Receipt, Info, FileSpreadsheet, ChevronRight, PiggyBank } from 'lucide-react';
 import { ListSkeleton } from '../components/Skeleton';
 
@@ -53,7 +53,7 @@ export default function Reports({
 
     const safetyTimer = setTimeout(() => {
       setLoading(false);
-    }, 2500);
+    }, 1000);
 
     return () => {
       unsubTx();
@@ -78,7 +78,7 @@ export default function Reports({
 
   const monthTxs = useMemo(() => {
     const { start, end } = period;
-    return transactions.filter(t => !t.is_split_pending && isWithinInterval(new Date(t.date), { start, end }));
+    return transactions.filter(t => !t.is_split_pending && isDateWithinIntervalSafely(t.date, start, end));
   }, [transactions, period]);
 
   // Helper to compute stats for any list of transactions, accounting for net debt/loan payments

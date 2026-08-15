@@ -8,7 +8,10 @@ export const subscribeToTransactions = (uid: string, callback: (data: Transactio
     const data = snapshot.val();
     if (!data) return callback([]);
     const formatted = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-    callback(formatted.sort((a, b) => b.date - a.date)); // descending
+    callback(formatted.sort((a, b) => Number(b.date || 0) - Number(a.date || 0))); // descending
+  }, (error) => {
+    console.warn('Error subscribing to transactions:', error);
+    callback([]);
   });
 };
 
@@ -24,18 +27,40 @@ export const DEFAULT_CATEGORIES: Omit<Category, 'id'>[] = [
   { name: 'Thu nhập khác', type: 'income', icon: 'Coins', color: '#26C6DA' },
 ];
 
+export const deleteCategory = (uid: string, id: string) => {
+  const itemRef = ref(db, `categories/${uid}/${id}`);
+  return remove(itemRef);
+};
+
 export const subscribeToCategories = (uid: string, callback: (data: Category[]) => void) => {
   const refPath = ref(db, `categories/${uid}`);
   return onValue(refPath, (snapshot) => {
     const data = snapshot.val();
     if (!data) {
       // Seed default categories for new users
-      DEFAULT_CATEGORIES.forEach(cat => {
-        push(refPath, cat);
-      });
+      try {
+        DEFAULT_CATEGORIES.forEach(cat => {
+          push(refPath, cat);
+        });
+      } catch (e) {
+        console.warn('Failed to seed categories:', e);
+      }
       return callback([]);
     }
-    callback(Object.keys(data).map(key => ({ id: key, ...data[key] })));
+    const list: Category[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+    // Filter out and auto delete any 'Đi chợ' category
+    const filtered = list.filter(cat => {
+      const isDiCho = cat.name && (cat.name.trim().toLowerCase() === 'đi chợ' || cat.name.trim().toLowerCase() === 'di cho');
+      if (isDiCho && cat.id) {
+        deleteCategory(uid, cat.id).catch(() => {});
+        return false;
+      }
+      return true;
+    });
+    callback(filtered);
+  }, (error) => {
+    console.warn('Error subscribing to categories:', error);
+    callback([]);
   });
 };
 
@@ -45,6 +70,9 @@ export const subscribeToBudgets = (uid: string, callback: (data: Budget[]) => vo
     const data = snapshot.val();
     if (!data) return callback([]);
     callback(Object.keys(data).map(key => ({ category_id: key, ...data[key] })));
+  }, (error) => {
+    console.warn('Error subscribing to budgets:', error);
+    callback([]);
   });
 };
 
@@ -54,6 +82,9 @@ export const subscribeToDebts = (uid: string, callback: (data: DebtInstallment[]
     const data = snapshot.val();
     if (!data) return callback([]);
     callback(Object.keys(data).map(key => ({ id: key, ...data[key] })));
+  }, (error) => {
+    console.warn('Error subscribing to debts:', error);
+    callback([]);
   });
 };
 
@@ -106,10 +137,13 @@ export const subscribeToSettlementDay = (uid: string, callback: (day: number) =>
   return onValue(refPath, (snapshot) => {
     const data = snapshot.val();
     if (data && data.settlement_day !== undefined) {
-      callback(data.settlement_day);
+      callback(Number(data.settlement_day) || 1);
     } else {
       callback(1); // default to 1st of the month
     }
+  }, (error) => {
+    console.warn('Error subscribing to settlement day:', error);
+    callback(1);
   });
 };
 
@@ -123,10 +157,13 @@ export const subscribeToSettlementConfig = (uid: string, callback: (config: { se
   return onValue(refPath, (snapshot) => {
     const data = snapshot.val() || {};
     callback({
-      settlement_day: data.settlement_day !== undefined ? data.settlement_day : 1,
-      mode: data.mode || 'fixed',
-      estimated_income: data.estimated_income !== undefined ? data.estimated_income : 10000000
+      settlement_day: data.settlement_day !== undefined ? (Number(data.settlement_day) || 1) : 1,
+      mode: data.mode === 'flexible' ? 'flexible' : 'fixed',
+      estimated_income: data.estimated_income !== undefined ? (Number(data.estimated_income) || 10000000) : 10000000
     });
+  }, (error) => {
+    console.warn('Error subscribing to settlement config:', error);
+    callback({ settlement_day: 1, mode: 'fixed', estimated_income: 10000000 });
   });
 };
 
@@ -144,7 +181,10 @@ export const subscribeToCustomCycles = (uid: string, callback: (cycles: CustomCy
     const data = snapshot.val();
     if (!data) return callback([]);
     const formatted = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-    callback(formatted.sort((a, b) => b.start_date - a.start_date));
+    callback(formatted.sort((a, b) => Number(b.start_date || 0) - Number(a.start_date || 0)));
+  }, (error) => {
+    console.warn('Error subscribing to custom cycles:', error);
+    callback([]);
   });
 };
 
@@ -171,7 +211,10 @@ export const subscribeToSavings = (uid: string, callback: (data: SavingTransacti
     const data = snapshot.val();
     if (!data) return callback([]);
     const formatted = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-    callback(formatted.sort((a, b) => b.date - a.date)); // descending date order
+    callback(formatted.sort((a, b) => Number(b.date || 0) - Number(a.date || 0))); // descending date order
+  }, (error) => {
+    console.warn('Error subscribing to savings:', error);
+    callback([]);
   });
 };
 

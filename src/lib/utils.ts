@@ -7,23 +7,53 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(amount: number) {
-  return new Intl.NumberFormat('vi-VN').format(amount) + ' VND';
+export function formatCurrency(amount: number | string | undefined | null) {
+  const num = Number(amount);
+  if (isNaN(num)) return '0 VND';
+  return new Intl.NumberFormat('vi-VN').format(num) + ' VND';
 }
 
-export function formatNumberInput(value: string | number): string {
+export function formatNumberInput(value: string | number | undefined | null): string {
   if (value === undefined || value === null || value === '') return '';
   const clean = String(value).replace(/\D/g, '');
   if (!clean) return '';
   return parseInt(clean, 10).toLocaleString('en-US');
 }
 
-export function parseNumberInput(value: string): number {
-  if (!value) return 0;
-  return parseFloat(value.replace(/,/g, '')) || 0;
+export function parseNumberInput(value: string | number | undefined | null): number {
+  if (value === undefined || value === null || value === '') return 0;
+  if (typeof value === 'number') return isNaN(value) ? 0 : value;
+  return parseFloat(String(value).replace(/,/g, '')) || 0;
 }
 
-export function getSettlementPeriod(settlementDay: number, date: Date = new Date()) {
+export function isDateWithinIntervalSafely(dateInput: any, start: Date, end: Date): boolean {
+  try {
+    if (!dateInput || !start || !end) return false;
+    const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+    const time = d.getTime();
+    const startTime = start.getTime();
+    const endTime = end.getTime();
+    if (isNaN(time) || isNaN(startTime) || isNaN(endTime)) return false;
+    return time >= startTime && time <= endTime;
+  } catch {
+    return false;
+  }
+}
+
+export function getSettlementPeriod(settlementDayInput: any, dateInput: any = new Date()) {
+  let date: Date;
+  try {
+    date = dateInput instanceof Date && !isNaN(dateInput.getTime()) ? dateInput : new Date(dateInput);
+    if (isNaN(date.getTime())) date = new Date();
+  } catch {
+    date = new Date();
+  }
+
+  let settlementDay = parseInt(String(settlementDayInput || 1), 10);
+  if (isNaN(settlementDay) || settlementDay < 1 || settlementDay > 31) {
+    settlementDay = 1;
+  }
+
   let start: Date;
   let end: Date;
 
@@ -52,43 +82,60 @@ export function getSettlementPeriod(settlementDay: number, date: Date = new Date
 }
 
 export function getCurrentPeriod(
-  config: { settlement_day: number; mode: 'fixed' | 'flexible' },
-  customCycles: CustomCycle[],
-  referenceDate: Date = new Date()
+  configInput?: { settlement_day?: number; mode?: 'fixed' | 'flexible' },
+  customCycles: CustomCycle[] = [],
+  referenceDate: any = new Date()
 ) {
-  if (config.mode === 'flexible' && customCycles.length > 0) {
-    const refTime = referenceDate.getTime();
-    const sorted = [...customCycles].sort((a, b) => b.start_date - a.start_date);
+  const config = {
+    settlement_day: Number(configInput?.settlement_day) || 1,
+    mode: configInput?.mode || 'fixed'
+  };
+
+  let refDate: Date;
+  try {
+    refDate = referenceDate instanceof Date && !isNaN(referenceDate.getTime()) ? referenceDate : new Date(referenceDate);
+    if (isNaN(refDate.getTime())) refDate = new Date();
+  } catch {
+    refDate = new Date();
+  }
+
+  if (config.mode === 'flexible' && Array.isArray(customCycles) && customCycles.length > 0) {
+    const refTime = refDate.getTime();
+    const validCycles = customCycles.filter(c => c && c.start_date && !isNaN(Number(c.start_date)));
+    const sorted = [...validCycles].sort((a, b) => Number(b.start_date) - Number(a.start_date));
     
-    // Find the cycle that contains referenceDate
-    let activeCycle = sorted.find(c => {
-      const start = c.start_date;
-      const end = c.end_date || Infinity;
-      return refTime >= start && refTime <= end;
-    });
+    if (sorted.length > 0) {
+      // Find the cycle that contains referenceDate
+      let activeCycle = sorted.find(c => {
+        const start = Number(c.start_date);
+        const end = c.end_date ? Number(c.end_date) : Infinity;
+        return refTime >= start && refTime <= end;
+      });
 
-    if (!activeCycle) {
-      // Fallback to the latest/current cycle
-      activeCycle = sorted[0];
-    }
+      if (!activeCycle) {
+        // Fallback to the latest/current cycle
+        activeCycle = sorted[0];
+      }
 
-    if (activeCycle) {
-      const start = startOfDay(new Date(activeCycle.start_date));
-      const end = activeCycle.end_date 
-        ? new Date(activeCycle.end_date)
-        : new Date(addMonths(start, 1).getTime() - 1); // fallback to 1 month later if not closed yet
-      return { 
-        start, 
-        end, 
-        isCustom: true, 
-        cycleId: activeCycle.id, 
-        cycleName: activeCycle.name || `Chu kỳ từ ${format(start, 'dd/MM')}`, 
-        salaryAmount: activeCycle.salary_amount 
-      };
+      if (activeCycle) {
+        const start = startOfDay(new Date(Number(activeCycle.start_date)));
+        const end = activeCycle.end_date 
+          ? new Date(Number(activeCycle.end_date))
+          : new Date(addMonths(start, 1).getTime() - 1);
+        return { 
+          start, 
+          end, 
+          isCustom: true, 
+          cycleId: activeCycle.id, 
+          cycleName: activeCycle.name || `Chu kỳ từ ${format(start, 'dd/MM')}`, 
+          salaryAmount: activeCycle.salary_amount 
+        };
+      }
     }
   }
 
   // Fallback to standard monthly settlement day
-  const { start, end } = getSettlementPeriod(config.settlement_day, referenceDate);
+  const { start, end } = getSettlementPeriod(config.settlement_day, refDate);
   return { start, end, isCustom: false };
 }
+

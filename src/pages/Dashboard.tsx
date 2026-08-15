@@ -21,25 +21,72 @@ import {
   EyeOff
 } from 'lucide-react';
 import { isWithinInterval } from 'date-fns';
-import { formatCurrency, getCurrentPeriod } from '../lib/utils';
+import { formatCurrency, getCurrentPeriod, isDateWithinIntervalSafely } from '../lib/utils';
 import { CardSkeleton } from '../components/Skeleton';
 
 export default function Dashboard({ 
   user,
-  onNavigateToHistory 
+  settlementConfigProp,
+  customCyclesProp,
+  transactionsProp,
+  budgetsProp
 }: { 
   user: User;
-  onNavigateToHistory?: () => void;
+  settlementConfigProp?: { settlement_day: number; mode: 'fixed' | 'flexible' };
+  customCyclesProp?: CustomCycle[];
+  transactionsProp?: Transaction[];
+  budgetsProp?: BudgetType[];
 }) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [debts, setDebts] = useState<DebtInstallment[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>(transactionsProp || []);
   const [savings, setSavings] = useState<SavingTransaction[]>([]);
-  const [budgets, setBudgets] = useState<BudgetType[]>([]);
-  const [settlementConfig, setSettlementConfig] = useState<{ settlement_day: number; mode: 'fixed' | 'flexible' }>({ settlement_day: 1, mode: 'fixed' });
-  const [customCycles, setCustomCycles] = useState<CustomCycle[]>([]);
+  const [budgets, setBudgets] = useState<BudgetType[]>(budgetsProp || []);
+  const [settlementConfig, setSettlementConfig] = useState<{ settlement_day: number; mode: 'fixed' | 'flexible' }>(
+    settlementConfigProp || { settlement_day: 1, mode: 'fixed' }
+  );
+  const [customCycles, setCustomCycles] = useState<CustomCycle[]>(customCyclesProp || []);
   const [loading, setLoading] = useState(true);
-  const [showAmounts, setShowAmounts] = useState(false);
+
+  // Per-card visibility state (persisted to localStorage)
+  const [cardVisibility, setCardVisibility] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem('finly_dashboard_card_visibility');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      balance: true,
+      savings: true,
+      loans: true,
+      debts: true,
+    };
+  });
+
+  const toggleCardVisibility = (key: string) => {
+    setCardVisibility(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      try {
+        localStorage.setItem('finly_dashboard_card_visibility', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (settlementConfigProp) setSettlementConfig(settlementConfigProp);
+  }, [settlementConfigProp]);
+
+  useEffect(() => {
+    if (customCyclesProp) setCustomCycles(customCyclesProp);
+  }, [customCyclesProp]);
+
+  useEffect(() => {
+    if (transactionsProp) setTransactions(transactionsProp);
+  }, [transactionsProp]);
+
+  useEffect(() => {
+    if (budgetsProp) setBudgets(budgetsProp);
+  }, [budgetsProp]);
 
   useEffect(() => {
     let loadedC = false, loadedD = false, loadedT = false, loadedB = false, loadedS = false, loadedCy = false, loadedSav = false;
@@ -57,10 +104,10 @@ export default function Dashboard({
     const unsubCy = subscribeToCustomCycles(user.uid, (data) => { setCustomCycles(data); loadedCy = true; checkLoaded(); });
     const unsubSav = subscribeToSavings(user.uid, (data) => { setSavings(data); loadedSav = true; checkLoaded(); });
 
-    // Safety fallback timer to prevent indefinite loading on network lag or new account setup
+    // Safety fallback timer to prevent indefinite loading
     const safetyTimer = setTimeout(() => {
       setLoading(false);
-    }, 2500);
+    }, 1000);
 
     return () => {
       unsubC();
@@ -82,8 +129,9 @@ export default function Dashboard({
   // Total savings balance
   const totalSavingsBalance = useMemo(() => {
     return savings.reduce((acc, s) => {
-      if (s.type === 'deposit') return acc + s.amount;
-      return acc - s.amount;
+      const amt = Number(s.amount) || 0;
+      if (s.type === 'deposit') return acc + amt;
+      return acc - amt;
     }, 0);
   }, [savings]);
 
@@ -93,8 +141,9 @@ export default function Dashboard({
     let expense = 0;
     transactions.forEach(t => {
       if (t.is_split_pending) return;
-      if (t.type === 'income') income += t.amount;
-      else expense += t.amount;
+      const amt = Number(t.amount) || 0;
+      if (t.type === 'income') income += amt;
+      else expense += amt;
     });
     return { income, expense, balance: income - expense };
   }, [transactions]);
@@ -106,8 +155,9 @@ export default function Dashboard({
 
     debts.forEach(d => {
       const debtTxs = transactions.filter(t => t.debt_id === d.id);
-      const computedPaid = debtTxs.reduce((sum, t) => sum + t.amount, 0);
-      const remaining = d.total_amount - computedPaid;
+      const computedPaid = debtTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+      const totalAmt = Number(d.total_amount) || 0;
+      const remaining = totalAmt - computedPaid;
       if (d.type === 'loan') {
         outstandingLoans += Math.max(0, remaining);
       } else {
@@ -128,32 +178,34 @@ export default function Dashboard({
   const budgetOverruns = useMemo(() => {
     if (budgets.length === 0) return [];
     
-    // Filter this month's transactions
+    // Filter this month's transactions safely
     const { start, end } = period;
     const monthExpenseTxs = transactions.filter(t => 
       t.type === 'expense' && 
       !t.is_split_pending && 
-      isWithinInterval(new Date(t.date), { start, end })
+      isDateWithinIntervalSafely(t.date, start, end)
     );
 
     // Sum expenses by category
     const totals: Record<string, number> = {};
     monthExpenseTxs.forEach(t => {
-      totals[t.category_id] = (totals[t.category_id] || 0) + t.amount;
+      const amt = Number(t.amount) || 0;
+      totals[t.category_id] = (totals[t.category_id] || 0) + amt;
     });
 
     // Check for overruns
     const overruns: { categoryName: string; spent: number; limit: number; excess: number }[] = [];
     budgets.forEach(b => {
+      const limitAmt = Number(b.limit_amount) || 0;
       const spent = totals[b.category_id || ''] || 0;
-      if (b.limit_amount && spent > b.limit_amount) {
+      if (limitAmt > 0 && spent > limitAmt) {
         const cat = categories.find(c => c.id === b.category_id);
         if (cat) {
           overruns.push({
             categoryName: cat.name,
             spent,
-            limit: b.limit_amount,
-            excess: spent - b.limit_amount
+            limit: limitAmt,
+            excess: spent - limitAmt
           });
         }
       }
@@ -161,11 +213,6 @@ export default function Dashboard({
 
     return overruns;
   }, [budgets, transactions, categories, period]);
-
-  const formatValue = (num: number) => {
-    if (!showAmounts) return '••••••••';
-    return formatCurrency(num);
-  };
 
   if (loading) {
     return (
@@ -195,27 +242,6 @@ export default function Dashboard({
             Xem nhanh tình hình tài chính tổng thể cùng bé Coin nha! ✨
           </p>
         </div>
-        
-        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-          <button
-            onClick={() => setShowAmounts(!showAmounts)}
-            className="flex items-center gap-2 bg-white hover:bg-amber-50 text-amber-950 border-2 border-amber-200 px-4 py-3 rounded-2xl text-xs font-black shadow-sm transition-all cursor-pointer"
-            title={showAmounts ? "Ẩn số tiền" : "Hiện số tiền"}
-          >
-            {showAmounts ? <EyeOff className="w-4 h-4 text-amber-700" /> : <Eye className="w-4 h-4 text-amber-700" />}
-            <span>{showAmounts ? "Ẩn số tiền" : "Hiện số tiền"}</span>
-          </button>
-
-          {onNavigateToHistory && (
-            <button
-              onClick={onNavigateToHistory}
-              className="flex items-center justify-center gap-2 bg-gradient-to-r from-[#FFD000] to-[#FFB700] hover:from-[#FFD61A] hover:to-[#FFC41A] text-amber-950 px-5 py-3 rounded-2xl text-xs font-black border-b-4 border-amber-600 shadow-md transition-all cursor-pointer"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Ghi chép giao dịch mới 📝</span>
-            </button>
-          )}
-        </div>
       </div>
 
       {/* SECTION: OVERVIEW CARDS */}
@@ -229,12 +255,22 @@ export default function Dashboard({
           <div className="relative z-10">
             <div className="flex justify-between items-start mb-2">
               <span className="text-[11px] font-black uppercase tracking-widest text-amber-800/95 flex items-center gap-1">Số dư khả dụng 🪙</span>
-              <div className="p-1 rounded-lg bg-amber-950/5 text-amber-700">
-                <Wallet className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); toggleCardVisibility('balance'); }}
+                  className="p-1 rounded-lg hover:bg-amber-950/10 text-amber-800 transition-colors cursor-pointer"
+                  title={cardVisibility.balance ? "Ẩn số tiền này" : "Hiện số tiền này"}
+                >
+                  {cardVisibility.balance ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                </button>
+                <div className="p-1 rounded-lg bg-amber-950/5 text-amber-700">
+                  <Wallet className="w-3.5 h-3.5" />
+                </div>
               </div>
             </div>
             <p className="text-2xl font-black font-mono tracking-tight text-slate-900 tabular-nums">
-              {formatValue(debtStats.adjustedBalance)}
+              {cardVisibility.balance ? formatCurrency(debtStats.adjustedBalance) : '••••••••'}
             </p>
           </div>
           <p className="text-[10px] text-amber-900/90 mt-3 flex items-center gap-1.5 leading-tight relative z-10 font-bold">
@@ -251,12 +287,22 @@ export default function Dashboard({
           <div className="relative z-10">
             <div className="flex justify-between items-start mb-2">
               <span className="text-[11px] font-black uppercase tracking-widest text-fuchsia-800/95 flex items-center gap-1">Hũ tiết kiệm 🐷</span>
-              <div className="p-1 rounded-lg bg-fuchsia-950/5 text-fuchsia-700">
-                <PiggyBank className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); toggleCardVisibility('savings'); }}
+                  className="p-1 rounded-lg hover:bg-fuchsia-950/10 text-fuchsia-800 transition-colors cursor-pointer"
+                  title={cardVisibility.savings ? "Ẩn số tiền này" : "Hiện số tiền này"}
+                >
+                  {cardVisibility.savings ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                </button>
+                <div className="p-1 rounded-lg bg-fuchsia-950/5 text-fuchsia-700">
+                  <PiggyBank className="w-3.5 h-3.5" />
+                </div>
               </div>
             </div>
             <p className="text-2xl font-black font-mono tracking-tight text-fuchsia-950 tabular-nums">
-              {formatValue(totalSavingsBalance)}
+              {cardVisibility.savings ? formatCurrency(totalSavingsBalance) : '••••••••'}
             </p>
           </div>
           <p className="text-[10px] text-fuchsia-900/80 mt-3 font-bold leading-tight relative z-10">
@@ -272,12 +318,22 @@ export default function Dashboard({
           <div className="relative z-10">
             <div className="flex justify-between items-start mb-2">
               <span className="text-[11px] font-black uppercase tracking-widest text-emerald-800/95 flex items-center gap-1">Cho vay chưa thu 🍀</span>
-              <div className="p-1 rounded-lg bg-emerald-950/5 text-emerald-700">
-                <ArrowUpRight className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); toggleCardVisibility('loans'); }}
+                  className="p-1 rounded-lg hover:bg-emerald-950/10 text-emerald-800 transition-colors cursor-pointer"
+                  title={cardVisibility.loans ? "Ẩn số tiền này" : "Hiện số tiền này"}
+                >
+                  {cardVisibility.loans ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                </button>
+                <div className="p-1 rounded-lg bg-emerald-950/5 text-emerald-700">
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </div>
               </div>
             </div>
             <p className="text-2xl font-black font-mono tracking-tight text-emerald-900 tabular-nums">
-              {formatValue(debtStats.outstandingLoans)}
+              {cardVisibility.loans ? formatCurrency(debtStats.outstandingLoans) : '••••••••'}
             </p>
           </div>
           <p className="text-[10px] text-emerald-850/80 mt-3 font-bold leading-tight relative z-10">
@@ -293,12 +349,22 @@ export default function Dashboard({
           <div className="relative z-10">
             <div className="flex justify-between items-start mb-2">
               <span className="text-[11px] font-black uppercase tracking-widest text-rose-800/95 flex items-center gap-1">Khoản nợ phải trả 🌸</span>
-              <div className="p-1 rounded-lg bg-rose-950/5 text-rose-700">
-                <ArrowDownLeft className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); toggleCardVisibility('debts'); }}
+                  className="p-1 rounded-lg hover:bg-rose-950/10 text-rose-800 transition-colors cursor-pointer"
+                  title={cardVisibility.debts ? "Ẩn số tiền này" : "Hiện số tiền này"}
+                >
+                  {cardVisibility.debts ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                </button>
+                <div className="p-1 rounded-lg bg-rose-950/5 text-rose-700">
+                  <ArrowDownLeft className="w-3.5 h-3.5" />
+                </div>
               </div>
             </div>
             <p className="text-2xl font-black font-mono tracking-tight text-rose-900 tabular-nums">
-              {formatValue(debtStats.outstandingDebts)}
+              {cardVisibility.debts ? formatCurrency(debtStats.outstandingDebts) : '••••••••'}
             </p>
           </div>
           <p className="text-[10px] text-rose-850/80 mt-3 font-bold leading-tight relative z-10">
@@ -318,7 +384,7 @@ export default function Dashboard({
                 {budgetOverruns.map((item, idx) => (
                   <p key={idx}>
                     • Danh mục <span className="font-extrabold">{item.categoryName}</span> vượt ngưỡng hạn mức{' '}
-                    <span className="font-extrabold">{formatValue(item.excess)}</span> (đã chi {formatValue(item.spent)} / {formatValue(item.limit)}).
+                    <span className="font-extrabold">{formatCurrency(item.excess)}</span> (đã chi {formatCurrency(item.spent)} / {formatCurrency(item.limit)}).
                   </p>
                 ))}
               </div>

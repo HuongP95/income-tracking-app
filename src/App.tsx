@@ -311,7 +311,15 @@ export default function App() {
               transition={{ duration: 0.18, ease: 'easeOut' }}
               className="h-full w-full"
             >
-              {currentTab === 'dashboard' && <Dashboard user={user} onNavigateToHistory={() => setActiveTab('history')} />}
+              {currentTab === 'dashboard' && (
+                <Dashboard 
+                  user={user} 
+                  settlementConfigProp={settlementConfig}
+                  customCyclesProp={customCycles}
+                  transactionsProp={transactions}
+                  budgetsProp={budgets}
+                />
+              )}
               {currentTab === 'history' && <History user={user} />}
               {currentTab === 'plan_budget' && <PlanAndBudget user={user} settlementDay={settlementConfig.settlement_day} settlementConfig={settlementConfig} customCycles={customCycles} />}
               {currentTab === 'savings_debts' && <SavingsAndDebts user={user} />}

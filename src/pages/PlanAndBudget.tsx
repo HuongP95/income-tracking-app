@@ -13,7 +13,7 @@ import {
   addTransaction 
 } from '../lib/db';
 import { Transaction, Category, Budget as BudgetType, CustomCycle } from '../types';
-import { isWithinInterval, format as formatDate } from 'date-fns';
+import { format as formatDate } from 'date-fns';
 import { 
   Target, 
   TrendingDown, 
@@ -28,10 +28,12 @@ import {
   Sparkles,
   PieChart,
   Edit3,
-  DollarSign
+  DollarSign,
+  Tag,
+  Circle
 } from 'lucide-react';
 import * as Icons from 'lucide-react';
-import { formatCurrency, formatNumberInput, parseNumberInput, getCurrentPeriod } from '../lib/utils';
+import { formatCurrency, formatNumberInput, parseNumberInput, getCurrentPeriod, isDateWithinIntervalSafely } from '../lib/utils';
 import { useFeedback } from '../context/FeedbackContext';
 import { CardSkeleton, ListSkeleton } from '../components/Skeleton';
 
@@ -54,13 +56,9 @@ export default function PlanAndBudget({
   const [plannedIncome, setPlannedIncome] = useState('15,000,000');
   const [loading, setLoading] = useState(true);
   const [isUpdatingCategory, setIsUpdatingCategory] = useState<string | null>(null);
-
-  // Custom cycle state
-  const [showCycleForm, setShowCycleForm] = useState(false);
-  const [cycleStartDate, setCycleStartDate] = useState(formatDate(new Date(), 'yyyy-MM-dd'));
-  const [cycleSalaryAmount, setCycleSalaryAmount] = useState('');
-  const [cycleNote, setCycleNote] = useState('');
-  const [autoAddSalaryTx, setAutoAddSalaryTx] = useState(true);
+  
+  // Controlled inputs for each category's budget limit
+  const [budgetInputs, setBudgetInputs] = useState<Record<string, string>>({});
 
   // Subscriptions
   useEffect(() => {
@@ -78,7 +76,7 @@ export default function PlanAndBudget({
       if (data && data.planned_income !== undefined) {
         setPlannedIncome(formatNumberInput(data.planned_income.toString()));
       }
-    });
+    }, (err) => console.warn('Error reading plan:', err));
 
     const unsubTx = subscribeToTransactions(user.uid, (data) => { setTransactions(data); loadedT = true; checkLoaded(); });
     const unsubCat = subscribeToCategories(user.uid, (data) => { setCategories(data); loadedC = true; checkLoaded(); });
@@ -86,7 +84,7 @@ export default function PlanAndBudget({
 
     const safetyTimer = setTimeout(() => {
       setLoading(false);
-    }, 2500);
+    }, 1000);
 
     return () => {
       unsubPlan();
@@ -97,25 +95,47 @@ export default function PlanAndBudget({
     };
   }, [user.uid]);
 
+  // Sync budget inputs when budgets are loaded or updated
+  useEffect(() => {
+    if (budgets.length > 0) {
+      setBudgetInputs(prev => {
+        const next = { ...prev };
+        budgets.forEach(b => {
+          if (b.category_id) {
+            const val = Number(b.limit_amount || (b as any).limit || (b as any).amount || 0);
+            if (val > 0) {
+              next[b.category_id] = formatNumberInput(val.toString());
+            }
+          }
+        });
+        return next;
+      });
+    }
+  }, [budgets]);
+
   // Current Settlement Period
   const period = useMemo(() => {
     return getCurrentPeriod(settlementConfig, customCycles);
   }, [settlementConfig, customCycles]);
 
-  // Filter transactions in current period
+  // Filter transactions in current period safely
   const monthTxs = useMemo(() => {
     const { start, end } = period;
-    return transactions.filter(t => !t.is_split_pending && isWithinInterval(new Date(t.date), { start, end }));
+    return transactions.filter(t => !t.is_split_pending && isDateWithinIntervalSafely(t.date, start, end));
   }, [transactions, period]);
 
   // Spent map per category
   const spentMap = useMemo(() => {
-    return monthTxs.reduce((acc, t) => {
+    const map: Record<string, number> = {};
+    monthTxs.forEach(t => {
       if (t.type === 'expense') {
-        acc[t.category_id] = (acc[t.category_id] || 0) + t.amount;
+        const amt = Number(t.amount) || 0;
+        if (t.category_id) {
+          map[t.category_id] = (map[t.category_id] || 0) + amt;
+        }
       }
-      return acc;
-    }, {} as Record<string, number>);
+    });
+    return map;
   }, [monthTxs]);
 
   // Actual total income and expense in period
@@ -123,34 +143,41 @@ export default function PlanAndBudget({
     let income = 0;
     let expense = 0;
     monthTxs.forEach(t => {
-      if (t.type === 'income') income += t.amount;
-      else expense += t.amount;
+      const amt = Number(t.amount) || 0;
+      if (t.type === 'income') income += amt;
+      else expense += amt;
     });
     return { income, expense, net: income - expense };
   }, [monthTxs]);
 
+  // All expense categories (excluding Đi chợ)
+  const expenseCategories = useMemo(() => {
+    return categories.filter(c => {
+      const type = (c.type || 'expense').toLowerCase();
+      const name = (c.name || '').toLowerCase().trim();
+      return type === 'expense' && name !== 'đi chợ' && name !== 'di cho' && !name.includes('đi chợ');
+    });
+  }, [categories]);
+
   // Map category budgets
   const budgetMap = useMemo(() => {
-    return budgets.reduce((acc, b) => {
-      acc[b.category_id!] = b;
-      return acc;
-    }, {} as Record<string, BudgetType>);
+    const map: Record<string, BudgetType> = {};
+    budgets.forEach(b => {
+      if (b.category_id) {
+        map[b.category_id] = {
+          category_id: b.category_id,
+          percentage: Number(b.percentage) || 0,
+          limit_amount: Number(b.limit_amount || (b as any).limit || (b as any).amount || 0)
+        };
+      }
+    });
+    return map;
   }, [budgets]);
-
-  const expenseCategories = useMemo(() => {
-    return categories.filter(c => 
-      c.type === 'expense' && 
-      !c.name.toLowerCase().includes('chợ') && 
-      !c.name.toLowerCase().includes('grocery') &&
-      !c.name.toLowerCase().includes('lương') &&
-      !c.name.toLowerCase().includes('salary')
-    );
-  }, [categories]);
 
   // Calculate total budget allocated across categories
   const totalBudgetedExpense = useMemo(() => {
     return expenseCategories.reduce((sum, cat) => {
-      const limit = budgetMap[cat.id!]?.limit_amount || 0;
+      const limit = Number(budgetMap[cat.id!]?.limit_amount || 0);
       return sum + limit;
     }, 0);
   }, [expenseCategories, budgetMap]);
@@ -158,11 +185,24 @@ export default function PlanAndBudget({
   // Total Variance = Total Budgeted - Actual Spent
   const totalVariance = totalBudgetedExpense - actualStats.expense;
 
+  // Handle typing inside category limit input
+  const handleInputChange = (categoryId: string, rawValue: string) => {
+    const formatted = formatNumberInput(rawValue);
+    setBudgetInputs(prev => ({ ...prev, [categoryId]: formatted }));
+  };
+
   // Handle updating budget limit for a specific category
-  const handleUpdateCategoryLimit = async (categoryId: string, rawValue: string) => {
-    const limitAmount = parseNumberInput(rawValue);
+  const handleUpdateCategoryLimit = async (categoryId: string, rawValue?: string) => {
+    const valueToParse = rawValue !== undefined ? rawValue : (budgetInputs[categoryId] || '');
+    const limitAmount = parseNumberInput(valueToParse);
     const inc = parseNumberInput(plannedIncome) || 1;
     const percentage = Math.min(100, Math.round((limitAmount / inc) * 100));
+
+    // Optimistic local update
+    setBudgets(prev => {
+      const remaining = prev.filter(b => b.category_id !== categoryId);
+      return [...remaining, { category_id: categoryId, limit_amount: limitAmount, percentage }];
+    });
 
     setIsUpdatingCategory(categoryId);
     try {
@@ -188,44 +228,6 @@ export default function PlanAndBudget({
       await updateSettlementConfig(user.uid, { estimated_income: num });
     } catch (err) {
       console.error(err);
-    }
-  };
-
-  // Add custom salary cycle
-  const handleAddCycle = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const salaryNum = parseNumberInput(cycleSalaryAmount);
-    if (!cycleStartDate) return;
-
-    try {
-      await addCustomCycle(user.uid, {
-        start_date: new Date(cycleStartDate).getTime(),
-        salary_amount: salaryNum,
-        note: cycleNote
-      });
-
-      if (autoAddSalaryTx && salaryNum > 0) {
-        let salaryCat = categories.find(c => c.type === 'income' && c.name.toLowerCase().includes('lương'));
-        if (!salaryCat) {
-          salaryCat = categories.find(c => c.type === 'income');
-        }
-        if (salaryCat) {
-          await addTransaction(user.uid, {
-            amount: salaryNum,
-            type: 'income',
-            category_id: salaryCat.id!,
-            date: new Date(cycleStartDate).getTime(),
-            note: cycleNote ? `Lương chu kỳ (${cycleNote})` : 'Lương chu kỳ mới'
-          });
-        }
-      }
-
-      setShowCycleForm(false);
-      setCycleSalaryAmount('');
-      setCycleNote('');
-      showToast('Đã thêm chu kỳ nhận lương mới thành công!', 'success');
-    } catch (err) {
-      showToast('Lỗi khi thêm chu kỳ.', 'error');
     }
   };
 
@@ -386,15 +388,13 @@ export default function PlanAndBudget({
 
       {/* SECTION: CATEGORY BUDGET COMPARISON & INPUT TABLE */}
       <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-lg shadow-amber-150/5 border-4 border-[#FFF2D8] space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-amber-100/60 pb-4">
-          <div>
-            <h2 className="text-xl font-black text-amber-950 flex items-center gap-2">
-              Chi tiết ngân sách & thực tế theo từng mục 📝
-            </h2>
-            <p className="text-xs text-amber-800/70 font-semibold mt-1">
-              Nhập số tiền ngân sách mong muốn cho mỗi danh mục chi tiêu ở ô bên dưới.
-            </p>
-          </div>
+        <div className="border-b border-amber-100/60 pb-4">
+          <h2 className="text-xl font-black text-amber-950 flex items-center gap-2">
+            Chi tiết ngân sách & thực tế theo từng mục 📝
+          </h2>
+          <p className="text-xs text-amber-800/70 font-semibold mt-1">
+            Nhập số tiền ngân sách mong muốn cho mỗi danh mục chi tiêu ở ô bên dưới (áp dụng cố định cho các tháng).
+          </p>
         </div>
 
         {expenseCategories.length === 0 ? (
@@ -404,11 +404,13 @@ export default function PlanAndBudget({
         ) : (
           <div className="space-y-4">
             {expenseCategories.map((cat) => {
-              const Icon = cat && Icons[cat.icon as keyof typeof Icons] ? (Icons[cat.icon as keyof typeof Icons] as any) : Icons.Circle;
+              const DynamicIcon = cat && cat.icon && (Icons as any)[cat.icon] ? (Icons as any)[cat.icon] : (Icons.Circle || Circle || Tag);
+              const Icon = (typeof DynamicIcon === 'function' || (typeof DynamicIcon === 'object' && DynamicIcon !== null)) ? DynamicIcon : Circle;
               const limit = budgetMap[cat.id!]?.limit_amount || 0;
               const spent = spentMap[cat.id!] || 0;
               const variance = limit - spent; // Positive = Under budget, Negative = Over budget
               const percentSpent = limit > 0 ? Math.min(100, Math.round((spent / limit) * 100)) : (spent > 0 ? 100 : 0);
+              const currentValue = budgetInputs[cat.id!] !== undefined ? budgetInputs[cat.id!] : (limit > 0 ? formatNumberInput(limit.toString()) : '');
 
               return (
                 <div 
@@ -437,7 +439,8 @@ export default function PlanAndBudget({
                       <span className="text-xs font-bold text-amber-800/80 shrink-0">Ngân sách:</span>
                       <input
                         type="text"
-                        defaultValue={formatNumberInput(limit.toString())}
+                        value={currentValue}
+                        onChange={(e) => handleInputChange(cat.id!, e.target.value)}
                         onBlur={(e) => handleUpdateCategoryLimit(cat.id!, e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {

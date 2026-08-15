@@ -87,10 +87,11 @@ export default function SavingsAndDebts({ user }: { user: User }) {
     const unsubT = subscribeToTransactions(user.uid, (data) => { setTransactions(data); loadedT = true; checkLoaded(); });
     const unsubC = subscribeToCategories(user.uid, (data) => { setCategories(data); loadedC = true; checkLoaded(); });
     const unsubSc = subscribeToSettlementConfig(user.uid, (data) => { setSettlementConfig(data); loadedSc = true; checkLoaded(); });
+    const unsubCy = subscribeToCustomCycles(user.uid, (data) => { setCustomCycles(data); });
 
     const safetyTimer = setTimeout(() => {
       setLoading(false);
-    }, 2500);
+    }, 1000);
 
     return () => {
       unsubS();
@@ -98,6 +99,7 @@ export default function SavingsAndDebts({ user }: { user: User }) {
       unsubT();
       unsubC();
       unsubSc();
+      unsubCy();
       clearTimeout(safetyTimer);
     };
   }, [user.uid]);
@@ -105,8 +107,9 @@ export default function SavingsAndDebts({ user }: { user: User }) {
   // Total Savings Balance
   const totalSavingsBalance = useMemo(() => {
     return savings.reduce((acc, s) => {
-      if (s.type === 'deposit') return acc + s.amount;
-      return acc - s.amount;
+      const amt = Number(s.amount) || 0;
+      if (s.type === 'deposit') return acc + amt;
+      return acc - amt;
     }, 0);
   }, [savings]);
 
@@ -116,8 +119,9 @@ export default function SavingsAndDebts({ user }: { user: User }) {
     let totalDebts = 0;
     debts.forEach(d => {
       const debtTxs = transactions.filter(t => t.debt_id === d.id);
-      const computedPaid = debtTxs.reduce((sum, t) => sum + t.amount, 0);
-      const remaining = d.total_amount - computedPaid;
+      const computedPaid = debtTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+      const totalAmt = Number(d.total_amount) || 0;
+      const remaining = totalAmt - computedPaid;
       if (d.type === 'loan') totalLoans += Math.max(0, remaining);
       else totalDebts += Math.max(0, remaining);
     });

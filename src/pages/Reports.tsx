@@ -51,10 +51,15 @@ export default function Reports({
       checkLoaded();
     });
 
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 2500);
+
     return () => {
       unsubTx();
       unsubCat();
       unsubSavings();
+      clearTimeout(safetyTimer);
     };
   }, [user.uid]);
 

@@ -12,11 +12,29 @@ export const subscribeToTransactions = (uid: string, callback: (data: Transactio
   });
 };
 
+export const DEFAULT_CATEGORIES: Omit<Category, 'id'>[] = [
+  { name: 'Ăn uống', type: 'expense', icon: 'Utensils', color: '#FF7043' },
+  { name: 'Di chuyển', type: 'expense', icon: 'Car', color: '#42A5F5' },
+  { name: 'Mua sắm', type: 'expense', icon: 'ShoppingBag', color: '#EC407A' },
+  { name: 'Hóa đơn & Tiện ích', type: 'expense', icon: 'FileText', color: '#AB47BC' },
+  { name: 'Giải trí', type: 'expense', icon: 'Gamepad2', color: '#7E57C2' },
+  { name: 'Sức khỏe', type: 'expense', icon: 'HeartPulse', color: '#26A69A' },
+  { name: 'Lương', type: 'income', icon: 'Banknote', color: '#66BB6A' },
+  { name: 'Thưởng', type: 'income', icon: 'Gift', color: '#FFA726' },
+  { name: 'Thu nhập khác', type: 'income', icon: 'Coins', color: '#26C6DA' },
+];
+
 export const subscribeToCategories = (uid: string, callback: (data: Category[]) => void) => {
   const refPath = ref(db, `categories/${uid}`);
   return onValue(refPath, (snapshot) => {
     const data = snapshot.val();
-    if (!data) return callback([]);
+    if (!data) {
+      // Seed default categories for new users
+      DEFAULT_CATEGORIES.forEach(cat => {
+        push(refPath, cat);
+      });
+      return callback([]);
+    }
     callback(Object.keys(data).map(key => ({ id: key, ...data[key] })));
   });
 };

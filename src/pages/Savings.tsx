@@ -233,7 +233,7 @@ export default function Savings({ user }: { user: User }) {
       message: `Bé Coin sẽ giúp bạn kết chuyển toàn bộ số tiền dư thừa hiện tại của ${cycleLabel} là ${formatCurrency(surplus)} vào quỹ Tiết kiệm nha! ✨`,
       confirmLabel: 'Gửi ngay thôi!',
       cancelLabel: 'Để sau nha',
-      type: 'success',
+      type: 'info',
       onConfirm: async () => {
         try {
           await addSavingTransaction(user.uid, {

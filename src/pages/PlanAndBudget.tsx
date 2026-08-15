@@ -84,11 +84,16 @@ export default function PlanAndBudget({
     const unsubCat = subscribeToCategories(user.uid, (data) => { setCategories(data); loadedC = true; checkLoaded(); });
     const unsubBud = subscribeToBudgets(user.uid, (data) => { setBudgets(data); loadedB = true; checkLoaded(); });
 
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 2500);
+
     return () => {
       unsubPlan();
       unsubTx();
       unsubCat();
       unsubBud();
+      clearTimeout(safetyTimer);
     };
   }, [user.uid]);
 

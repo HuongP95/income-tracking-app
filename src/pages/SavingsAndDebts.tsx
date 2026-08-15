@@ -77,17 +77,20 @@ export default function SavingsAndDebts({ user }: { user: User }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let count = 0;
+    let loadedS = false, loadedD = false, loadedT = false, loadedC = false, loadedSc = false;
     const checkLoaded = () => {
-      count++;
-      if (count >= 5) setLoading(false);
+      if (loadedS && loadedD && loadedT && loadedC && loadedSc) setLoading(false);
     };
 
-    const unsubS = subscribeToSavings(user.uid, (data) => { setSavings(data); checkLoaded(); });
-    const unsubD = subscribeToDebts(user.uid, (data) => { setDebts(data); checkLoaded(); });
-    const unsubT = subscribeToTransactions(user.uid, (data) => { setTransactions(data); checkLoaded(); });
-    const unsubC = subscribeToCategories(user.uid, (data) => { setCategories(data); checkLoaded(); });
-    const unsubSc = subscribeToSettlementConfig(user.uid, (data) => { setSettlementConfig(data); checkLoaded(); });
+    const unsubS = subscribeToSavings(user.uid, (data) => { setSavings(data); loadedS = true; checkLoaded(); });
+    const unsubD = subscribeToDebts(user.uid, (data) => { setDebts(data); loadedD = true; checkLoaded(); });
+    const unsubT = subscribeToTransactions(user.uid, (data) => { setTransactions(data); loadedT = true; checkLoaded(); });
+    const unsubC = subscribeToCategories(user.uid, (data) => { setCategories(data); loadedC = true; checkLoaded(); });
+    const unsubSc = subscribeToSettlementConfig(user.uid, (data) => { setSettlementConfig(data); loadedSc = true; checkLoaded(); });
+
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 2500);
 
     return () => {
       unsubS();
@@ -95,6 +98,7 @@ export default function SavingsAndDebts({ user }: { user: User }) {
       unsubT();
       unsubC();
       unsubSc();
+      clearTimeout(safetyTimer);
     };
   }, [user.uid]);
 

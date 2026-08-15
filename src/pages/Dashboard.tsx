@@ -42,21 +42,25 @@ export default function Dashboard({
   const [showAmounts, setShowAmounts] = useState(false);
 
   useEffect(() => {
-    let count = 0;
+    let loadedC = false, loadedD = false, loadedT = false, loadedB = false, loadedS = false, loadedCy = false, loadedSav = false;
     const checkLoaded = () => {
-      count++;
-      if (count >= 6) {
+      if (loadedC && loadedD && loadedT && loadedB && loadedS && loadedCy && loadedSav) {
         setLoading(false);
       }
     };
 
-    const unsubC = subscribeToCategories(user.uid, (data) => { setCategories(data); checkLoaded(); });
-    const unsubD = subscribeToDebts(user.uid, (data) => { setDebts(data); checkLoaded(); });
-    const unsubT = subscribeToTransactions(user.uid, (data) => { setTransactions(data); checkLoaded(); });
-    const unsubB = subscribeToBudgets(user.uid, (data) => { setBudgets(data); checkLoaded(); });
-    const unsubS = subscribeToSettlementConfig(user.uid, (data) => { setSettlementConfig(data); checkLoaded(); });
-    const unsubCy = subscribeToCustomCycles(user.uid, (data) => { setCustomCycles(data); checkLoaded(); });
-    const unsubSav = subscribeToSavings(user.uid, (data) => { setSavings(data); checkLoaded(); });
+    const unsubC = subscribeToCategories(user.uid, (data) => { setCategories(data); loadedC = true; checkLoaded(); });
+    const unsubD = subscribeToDebts(user.uid, (data) => { setDebts(data); loadedD = true; checkLoaded(); });
+    const unsubT = subscribeToTransactions(user.uid, (data) => { setTransactions(data); loadedT = true; checkLoaded(); });
+    const unsubB = subscribeToBudgets(user.uid, (data) => { setBudgets(data); loadedB = true; checkLoaded(); });
+    const unsubS = subscribeToSettlementConfig(user.uid, (data) => { setSettlementConfig(data); loadedS = true; checkLoaded(); });
+    const unsubCy = subscribeToCustomCycles(user.uid, (data) => { setCustomCycles(data); loadedCy = true; checkLoaded(); });
+    const unsubSav = subscribeToSavings(user.uid, (data) => { setSavings(data); loadedSav = true; checkLoaded(); });
+
+    // Safety fallback timer to prevent indefinite loading on network lag or new account setup
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 2500);
 
     return () => {
       unsubC();
@@ -66,6 +70,7 @@ export default function Dashboard({
       unsubS();
       unsubCy();
       unsubSav();
+      clearTimeout(safetyTimer);
     };
   }, [user.uid]);
 

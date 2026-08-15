@@ -33,12 +33,9 @@ export default function History({ user }: { user: User }) {
     return localStorage.getItem('filter_category_id') || 'all';
   });
 
-  // Date range filter state (default current month)
-  const defaultFromDate = useMemo(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'), []);
-  const defaultToDate = useMemo(() => format(endOfMonth(new Date()), 'yyyy-MM-dd'), []);
-
-  const [fromDate, setFromDate] = useState<string>(defaultFromDate);
-  const [toDate, setToDate] = useState<string>(defaultToDate);
+  // Date range filter state (default empty = all time)
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
 
   // Add transaction form state (Top section)
   const [amount, setAmount] = useState('');
@@ -91,9 +88,14 @@ export default function History({ user }: { user: User }) {
       checkLoaded();
     });
 
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 2500);
+
     return () => {
       unsubTx();
       unsubCat();
+      clearTimeout(safetyTimer);
     };
   }, [user.uid]);
 
@@ -183,8 +185,8 @@ export default function History({ user }: { user: User }) {
       });
       setShowCategoryModal(false);
       setNewCatName('');
-      if (createdCatId) {
-        setCategoryId(createdCatId);
+      if (createdCatId && createdCatId.id) {
+        setCategoryId(createdCatId.id);
       }
       showToast('Đã thêm danh mục mới!', 'success');
     } catch (err) {
@@ -581,16 +583,30 @@ export default function History({ user }: { user: User }) {
               <button
                 type="button"
                 onClick={() => {
-                  setFromDate(defaultFromDate);
-                  setToDate(defaultToDate);
+                  setFromDate('');
+                  setToDate('');
                 }}
                 className={`text-[10px] font-black px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
-                  fromDate === defaultFromDate && toDate === defaultToDate
-                    ? 'bg-amber-500 text-white border-amber-600 shadow-sm'
+                  !fromDate && !toDate
+                    ? 'bg-amber-400 text-amber-950 border-amber-500 shadow-xs'
                     : 'bg-amber-50/70 text-amber-900 border-amber-200/80 hover:bg-amber-100'
                 }`}
               >
-                Tháng này 📅
+                Tất cả thời gian ♾️
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+                  setToDate(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+                }}
+                className={`text-[10px] font-black px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                  fromDate === format(startOfMonth(new Date()), 'yyyy-MM-dd')
+                    ? 'bg-amber-400 text-amber-950 border-amber-500 shadow-xs'
+                    : 'bg-amber-50/70 text-amber-900 border-amber-200/80 hover:bg-amber-100'
+                }`}
+              >
+                Tháng 8 / 2026 📅
               </button>
               <button
                 type="button"
@@ -599,9 +615,13 @@ export default function History({ user }: { user: User }) {
                   setFromDate(format(startOfMonth(prevM), 'yyyy-MM-dd'));
                   setToDate(format(endOfMonth(prevM), 'yyyy-MM-dd'));
                 }}
-                className="text-[10px] font-black px-2.5 py-1 rounded-lg border bg-amber-50/70 text-amber-900 border-amber-200/80 hover:bg-amber-100 transition-all cursor-pointer"
+                className={`text-[10px] font-black px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                  fromDate === format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd')
+                    ? 'bg-amber-400 text-amber-950 border-amber-500 shadow-xs'
+                    : 'bg-amber-50/70 text-amber-900 border-amber-200/80 hover:bg-amber-100'
+                }`}
               >
-                Tháng trước ⏪
+                Tháng 7 / 2026 ⏪
               </button>
               <button
                 type="button"
@@ -610,19 +630,13 @@ export default function History({ user }: { user: User }) {
                   setFromDate(todayStr);
                   setToDate(todayStr);
                 }}
-                className="text-[10px] font-black px-2.5 py-1 rounded-lg border bg-amber-50/70 text-amber-900 border-amber-200/80 hover:bg-amber-100 transition-all cursor-pointer"
+                className={`text-[10px] font-black px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                  fromDate === format(new Date(), 'yyyy-MM-dd') && toDate === format(new Date(), 'yyyy-MM-dd')
+                    ? 'bg-amber-400 text-amber-950 border-amber-500 shadow-xs'
+                    : 'bg-amber-50/70 text-amber-900 border-amber-200/80 hover:bg-amber-100'
+                }`}
               >
                 Hôm nay ☀️
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setFromDate('');
-                  setToDate('');
-                }}
-                className="text-[10px] font-black px-2.5 py-1 rounded-lg border bg-amber-50/70 text-amber-900 border-amber-200/80 hover:bg-amber-100 transition-all cursor-pointer"
-              >
-                Tất cả thời gian ♾️
               </button>
             </div>
           </div>
@@ -681,22 +695,22 @@ export default function History({ user }: { user: User }) {
           </div>
 
           {/* Active Filter Clear Tag */}
-          {(fromDate !== defaultFromDate || toDate !== defaultToDate || selectedCategory !== 'all' || selectedType !== 'all') && (
+          {(fromDate !== '' || toDate !== '' || selectedCategory !== 'all' || selectedType !== 'all') && (
             <div className="pt-2 border-t border-amber-100/50 flex items-center justify-between">
               <span className="text-[11px] font-bold text-amber-800/70">
                 Đang lọc từ <span className="font-mono text-amber-950 font-black">{fromDate || 'bắt đầu'}</span> đến <span className="font-mono text-amber-950 font-black">{toDate || 'hiện tại'}</span>.
               </span>
               <button
                 onClick={() => {
-                  setFromDate(defaultFromDate);
-                  setToDate(defaultToDate);
+                  setFromDate('');
+                  setToDate('');
                   setSelectedCategory('all');
                   setSelectedType('all');
                 }}
                 className="text-xs font-black text-rose-600 hover:text-rose-800 flex items-center gap-1 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
-                Khôi phục bộ lọc mặc định (Tháng này)
+                Xóa tất cả bộ lọc (Xem tất cả)
               </button>
             </div>
           )}
@@ -709,8 +723,30 @@ export default function History({ user }: { user: User }) {
               <div className="p-12 text-center text-amber-800 flex flex-col items-center justify-center gap-3">
                 <span className="text-4xl">🐾</span>
                 <div>
-                  <p className="font-black text-amber-950">Chưa có giao dịch nào phù hợp</p>
-                  <p className="text-xs text-amber-700/70 mt-1">Hãy bấm nút "Ghi chép giao dịch mới" ở trên để tạo mới hoặc điều chỉnh bộ lọc nhé!</p>
+                  <p className="font-black text-amber-950">
+                    {transactions.length > 0 
+                      ? `Có ${transactions.length} giao dịch nằm ngoài bộ lọc hiện tại` 
+                      : 'Chưa có giao dịch nào'}
+                  </p>
+                  <div className="text-xs text-amber-700/70 mt-1">
+                    {transactions.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFromDate('');
+                          setToDate('');
+                          setSelectedCategory('all');
+                          setSelectedType('all');
+                          setSearchTerm('');
+                        }}
+                        className="text-amber-950 font-black bg-gradient-to-r from-[#FFD000] to-[#FFB700] hover:from-[#FFD61A] hover:to-[#FFC41A] px-4 py-2.5 rounded-2xl border-b-2 border-amber-600 shadow-sm mt-3 inline-flex items-center gap-1.5 cursor-pointer hover:scale-[1.02] transition-all"
+                      >
+                        ⚡ Xem tất cả {transactions.length} giao dịch ngay (Khôi phục bộ lọc)
+                      </button>
+                    ) : (
+                      'Hãy bấm nút "Ghi chép giao dịch mới" ở trên để tạo mới nhé!'
+                    )}
+                  </div>
                 </div>
               </div>
             ) : (

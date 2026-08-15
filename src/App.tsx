@@ -41,7 +41,15 @@ export default function App() {
       setUser(u);
       setLoading(false);
     });
-    return unsubscribe;
+    // Fallback safety timer in case auth state takes long to settle
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 3000);
+
+    return () => {
+      unsubscribe();
+      clearTimeout(safetyTimer);
+    };
   }, []);
 
   useEffect(() => {
@@ -253,14 +261,27 @@ export default function App() {
             </div>
           </div>
 
-          {/* Logout Button */}
-          <button 
-            onClick={() => signOut(auth)}
-            className="hidden md:flex items-center space-x-3 px-4 py-3 text-amber-700 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all font-bold text-sm cursor-pointer"
-          >
-            <LogOut className="w-5 h-5 text-amber-500/60 group-hover:text-rose-500" />
-            <span className="tracking-tight">Đăng xuất</span>
-          </button>
+          {/* User Email & Logout Section */}
+          <div className="hidden md:flex flex-col gap-2 pt-2 border-t border-amber-100">
+            {user.email && (
+              <div className="px-3 py-2 bg-amber-50/80 rounded-xl border border-amber-200/60 flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-amber-300 flex items-center justify-center text-[10px] font-black text-amber-950 shrink-0">
+                  {user.email.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold text-amber-700/80 uppercase tracking-widest leading-none">Tài khoản</p>
+                  <p className="text-xs font-bold text-amber-950 truncate mt-0.5" title={user.email}>{user.email}</p>
+                </div>
+              </div>
+            )}
+            <button 
+              onClick={() => signOut(auth)}
+              className="flex items-center space-x-3 px-3 py-2.5 text-amber-700 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all font-bold text-sm cursor-pointer"
+            >
+              <LogOut className="w-5 h-5 text-amber-500/60 group-hover:text-rose-500" />
+              <span className="tracking-tight">Đăng xuất</span>
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -290,7 +311,7 @@ export default function App() {
               transition={{ duration: 0.18, ease: 'easeOut' }}
               className="h-full w-full"
             >
-              {currentTab === 'dashboard' && <Dashboard user={user} />}
+              {currentTab === 'dashboard' && <Dashboard user={user} onNavigateToHistory={() => setActiveTab('history')} />}
               {currentTab === 'history' && <History user={user} />}
               {currentTab === 'plan_budget' && <PlanAndBudget user={user} settlementDay={settlementConfig.settlement_day} settlementConfig={settlementConfig} customCycles={customCycles} />}
               {currentTab === 'savings_debts' && <SavingsAndDebts user={user} />}

@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Finly - Quản Lý Thu Chi",
+  "description": "Ứng dụng quản lý thu chi cá nhân, ngân sách và sổ nợ tài chính thông minh, dễ thương.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

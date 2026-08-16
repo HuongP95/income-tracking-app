@@ -65,27 +65,146 @@ export const subscribeToCategories = (uid: string, callback: (data: Category[]) 
 };
 
 export const subscribeToBudgets = (uid: string, callback: (data: Budget[]) => void) => {
-  const refPath = ref(db, `budgets/${uid}`);
-  return onValue(refPath, (snapshot) => {
-    const data = snapshot.val();
-    if (!data) return callback([]);
-    callback(Object.keys(data).map(key => ({ category_id: key, ...data[key] })));
+  const budgetsMap: Record<string, Budget> = {};
+
+  const emit = () => {
+    callback(Object.values(budgetsMap));
+  };
+
+  const processSnapshot = (data: any) => {
+    if (!data || typeof data !== 'object') return;
+    Object.keys(data).forEach(key => {
+      const item = data[key];
+      if (!item) return;
+      
+      let catId = '';
+      if (typeof item === 'object') {
+        catId = item.category_id || item.categoryId || item.id || key;
+      } else if (typeof item === 'number') {
+        catId = key;
+      }
+
+      if (!catId) return;
+
+      const limitAmount = typeof item === 'object' 
+        ? Number(item.limit_amount || item.limit || item.amount || item.budget || 0)
+        : Number(item || 0);
+
+      const percentage = typeof item === 'object'
+        ? Number(item.percentage || item.percent || 0)
+        : 0;
+
+      if (!budgetsMap[catId] || (limitAmount > 0 && (budgetsMap[catId].limit_amount === 0 || !budgetsMap[catId].limit_amount))) {
+        budgetsMap[catId] = {
+          category_id: catId,
+          limit_amount: limitAmount,
+          percentage: percentage
+        };
+      } else if (budgetsMap[catId]) {
+        // Update existing if new value has limit
+        if (limitAmount > 0) {
+          budgetsMap[catId].limit_amount = limitAmount;
+        }
+        if (percentage > 0) {
+          budgetsMap[catId].percentage = percentage;
+        }
+      }
+    });
+    emit();
+  };
+
+  // 1. Primary path: budgets/${uid}
+  const refBudgets = ref(db, `budgets/${uid}`);
+  const unsubBudgets = onValue(refBudgets, (snapshot) => {
+    processSnapshot(snapshot.val());
   }, (error) => {
     console.warn('Error subscribing to budgets:', error);
-    callback([]);
   });
+
+  // 2. Singular fallback path: budget/${uid}
+  let unsubBudgetSingular: (() => void) | null = null;
+  try {
+    const refBudgetSingular = ref(db, `budget/${uid}`);
+    unsubBudgetSingular = onValue(refBudgetSingular, (snapshot) => {
+      processSnapshot(snapshot.val());
+    }, () => {});
+  } catch (e) {}
+
+  // 3. Monthly plans embedded budgets: monthly_plans/${uid}/budgets
+  let unsubMonthlyPlansBudgets: (() => void) | null = null;
+  try {
+    const refPlansBudgets = ref(db, `monthly_plans/${uid}/budgets`);
+    unsubMonthlyPlansBudgets = onValue(refPlansBudgets, (snapshot) => {
+      processSnapshot(snapshot.val());
+    }, () => {});
+  } catch (e) {}
+
+  // 4. Categories with embedded limit_amount: categories/${uid}
+  let unsubCategories: (() => void) | null = null;
+  try {
+    const refCats = ref(db, `categories/${uid}`);
+    unsubCategories = onValue(refCats, (snapshot) => {
+      const catData = snapshot.val();
+      if (catData && typeof catData === 'object') {
+        Object.keys(catData).forEach(catId => {
+          const cat = catData[catId];
+          if (cat && (cat.limit_amount || cat.budget || cat.limit)) {
+            const lim = Number(cat.limit_amount || cat.budget || cat.limit || 0);
+            if (lim > 0 && (!budgetsMap[catId] || !budgetsMap[catId].limit_amount)) {
+              budgetsMap[catId] = {
+                category_id: catId,
+                limit_amount: lim,
+                percentage: Number(cat.percentage || 0)
+              };
+            }
+          }
+        });
+        emit();
+      }
+    }, () => {});
+  } catch (e) {}
+
+  return () => {
+    unsubBudgets();
+    if (unsubBudgetSingular) unsubBudgetSingular();
+    if (unsubMonthlyPlansBudgets) unsubMonthlyPlansBudgets();
+    if (unsubCategories) unsubCategories();
+  };
 };
 
 export const subscribeToDebts = (uid: string, callback: (data: DebtInstallment[]) => void) => {
-  const refPath = ref(db, `debts_installments/${uid}`);
-  return onValue(refPath, (snapshot) => {
-    const data = snapshot.val();
-    if (!data) return callback([]);
-    callback(Object.keys(data).map(key => ({ id: key, ...data[key] })));
+  let debtsMap: Record<string, DebtInstallment> = {};
+  let unsub2: (() => void) | null = null;
+
+  const debtsRef = ref(db, `debts/${uid}`);
+  const unsub1 = onValue(debtsRef, (snapshot) => {
+    const data = snapshot.val() || {};
+    Object.keys(data).forEach(key => {
+      debtsMap[key] = { id: key, ...data[key] };
+    });
+    callback(Object.values(debtsMap));
   }, (error) => {
     console.warn('Error subscribing to debts:', error);
-    callback([]);
   });
+
+  // Also check debts_installments for legacy data
+  try {
+    const legacyRef = ref(db, `debts_installments/${uid}`);
+    unsub2 = onValue(legacyRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      Object.keys(data).forEach(key => {
+        if (!debtsMap[key]) {
+          debtsMap[key] = { id: key, ...data[key] };
+        }
+      });
+      callback(Object.values(debtsMap));
+    }, () => {});
+  } catch (e) {}
+
+  return () => {
+    unsub1();
+    if (unsub2) unsub2();
+  };
 };
 
 export const addTransaction = (uid: string, transaction: Omit<Transaction, 'id'>) => {
@@ -111,25 +230,116 @@ export const addCategory = async (uid: string, category: Omit<Category, 'id'>) =
   return { id: newRef.key!, ...category };
 };
 
-export const setBudget = (uid: string, categoryId: string, budget: Omit<Budget, 'category_id'>) => {
-  const itemRef = ref(db, `budgets/${uid}/${categoryId}`);
-  return set(itemRef, budget);
+export const setBudget = async (uid: string, categoryId: string, budget: Omit<Budget, 'category_id'>) => {
+  if (!uid || !categoryId) return;
+
+  const limitAmount = Math.max(0, Number(budget.limit_amount) || 0);
+  const percentage = Math.max(0, Math.min(100, Number(budget.percentage) || 0));
+
+  const cleanBudget = {
+    limit_amount: limitAmount,
+    percentage: percentage,
+    category_id: categoryId,
+    updated_at: Date.now()
+  };
+
+  let writeSuccess = false;
+
+  // Try writing to budgets/${uid}/${categoryId}
+  try {
+    const itemRef = ref(db, `budgets/${uid}/${categoryId}`);
+    await set(itemRef, cleanBudget);
+    writeSuccess = true;
+  } catch (e) {
+    console.warn('Could not write to budgets path, trying fallback paths...', e);
+  }
+
+  // Also write to fallback path budget/${uid}/${categoryId}
+  try {
+    const fallbackRef = ref(db, `budget/${uid}/${categoryId}`);
+    await set(fallbackRef, cleanBudget);
+    writeSuccess = true;
+  } catch (e) {}
+
+  // Also write to monthly_plans/${uid}/budgets/${categoryId}
+  try {
+    const planRef = ref(db, `monthly_plans/${uid}/budgets/${categoryId}`);
+    await set(planRef, cleanBudget);
+    writeSuccess = true;
+  } catch (e) {}
+
+  // Also update category limit directly in categories/${uid}/${categoryId}
+  try {
+    const catItemRef = ref(db, `categories/${uid}/${categoryId}`);
+    await update(catItemRef, { 
+      limit_amount: limitAmount,
+      budget: limitAmount,
+      percentage: percentage 
+    });
+    writeSuccess = true;
+  } catch (e) {}
+
+  if (!writeSuccess) {
+    throw new Error('Không thể lưu ngân sách vào máy chủ.');
+  }
 };
 
-export const addDebt = (uid: string, debt: Omit<DebtInstallment, 'id'>) => {
-  const listRef = ref(db, `debts_installments/${uid}`);
-  const newRef = push(listRef);
-  return set(newRef, debt);
+export const addDebt = async (uid: string, debt: Omit<DebtInstallment, 'id'>) => {
+  const cleanDebt = {
+    name: String(debt.name || '').trim(),
+    total_amount: Number(debt.total_amount) || 0,
+    paid_amount: Number(debt.paid_amount) || 0,
+    monthly_payment: Number(debt.monthly_payment) || 0,
+    term_months: Number(debt.term_months) || 1,
+    start_date: Number(debt.start_date) || Date.now(),
+    type: debt.type === 'loan' ? 'loan' : debt.type === 'installment' ? 'installment' : 'debt'
+  };
+
+  try {
+    const listRef = ref(db, `debts/${uid}`);
+    const newRef = push(listRef);
+    await set(newRef, cleanDebt);
+    return newRef;
+  } catch (err: any) {
+    if (err?.code === 'PERMISSION_DENIED' || err?.message?.includes('Permission denied')) {
+      // Try fallback to debts_installments
+      const legacyListRef = ref(db, `debts_installments/${uid}`);
+      const newLegacyRef = push(legacyListRef);
+      await set(newLegacyRef, cleanDebt);
+      return newLegacyRef;
+    }
+    throw err;
+  }
 };
 
-export const updateDebt = (uid: string, id: string, debt: Partial<DebtInstallment>) => {
-  const itemRef = ref(db, `debts_installments/${uid}/${id}`);
-  return update(itemRef, debt);
+export const updateDebt = async (uid: string, id: string, debt: Partial<DebtInstallment>) => {
+  const cleanDebt: any = {};
+  if (debt.name !== undefined) cleanDebt.name = String(debt.name).trim();
+  if (debt.total_amount !== undefined) cleanDebt.total_amount = Number(debt.total_amount) || 0;
+  if (debt.paid_amount !== undefined) cleanDebt.paid_amount = Number(debt.paid_amount) || 0;
+  if (debt.monthly_payment !== undefined) cleanDebt.monthly_payment = Number(debt.monthly_payment) || 0;
+  if (debt.term_months !== undefined) cleanDebt.term_months = Number(debt.term_months) || 1;
+  if (debt.start_date !== undefined) cleanDebt.start_date = Number(debt.start_date) || Date.now();
+  if (debt.type !== undefined) cleanDebt.type = debt.type === 'loan' ? 'loan' : debt.type === 'installment' ? 'installment' : 'debt';
+
+  try {
+    const itemRef = ref(db, `debts/${uid}/${id}`);
+    await update(itemRef, cleanDebt);
+  } catch (err: any) {
+    const legacyItemRef = ref(db, `debts_installments/${uid}/${id}`);
+    await update(legacyItemRef, cleanDebt);
+  }
 };
 
-export const deleteDebt = (uid: string, id: string) => {
-  const itemRef = ref(db, `debts_installments/${uid}/${id}`);
-  return remove(itemRef);
+export const deleteDebt = async (uid: string, id: string) => {
+  try {
+    const itemRef = ref(db, `debts/${uid}/${id}`);
+    await remove(itemRef);
+  } catch (err) {}
+  try {
+    const legacyItemRef = ref(db, `debts_installments/${uid}/${id}`);
+    await remove(legacyItemRef);
+  } catch (err) {}
 };
 
 export const subscribeToSettlementDay = (uid: string, callback: (day: number) => void) => {

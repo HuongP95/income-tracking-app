@@ -280,7 +280,10 @@ export default function Dashboard({
         </div>
 
         {/* Savings Balance Card */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#FDF4FF] via-[#FAE8FF] to-[#F5D0FE] p-5 shadow-sm border-2 border-fuchsia-300/60 flex flex-col justify-between min-h-[120px] group transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-default">
+        <div 
+          onClick={() => window.dispatchEvent(new CustomEvent('finly_change_tab', { detail: { tab: 'savings_debts', subTab: 'savings' } }))}
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#FDF4FF] via-[#FAE8FF] to-[#F5D0FE] p-5 shadow-sm border-2 border-fuchsia-300/60 flex flex-col justify-between min-h-[120px] group transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-pointer"
+        >
           <div className="absolute -right-2 -bottom-2 opacity-[0.08] transform group-hover:scale-110 transition-transform duration-300">
             <PiggyBank className="w-24 h-24 text-fuchsia-950" />
           </div>
@@ -311,7 +314,10 @@ export default function Dashboard({
         </div>
 
         {/* Outstanding Loans */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#F0FDF4] via-[#DCFCE7] to-[#BBF7D0] p-5 shadow-sm border-2 border-emerald-300/60 flex flex-col justify-between min-h-[120px] group transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-default">
+        <div 
+          onClick={() => window.dispatchEvent(new CustomEvent('finly_change_tab', { detail: { tab: 'savings_debts', subTab: 'debts' } }))}
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#F0FDF4] via-[#DCFCE7] to-[#BBF7D0] p-5 shadow-sm border-2 border-emerald-300/60 flex flex-col justify-between min-h-[120px] group transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-pointer"
+        >
           <div className="absolute -right-2 -bottom-2 opacity-[0.06] transform group-hover:scale-110 transition-transform duration-300">
             <ArrowUpRight className="w-24 h-24 text-emerald-950" />
           </div>
@@ -342,7 +348,10 @@ export default function Dashboard({
         </div>
 
         {/* Outstanding Debts */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#FFF5F5] via-[#FFE3E3] to-[#FFC9C9] p-5 shadow-sm border-2 border-rose-300/60 flex flex-col justify-between min-h-[120px] group transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-default">
+        <div 
+          onClick={() => window.dispatchEvent(new CustomEvent('finly_change_tab', { detail: { tab: 'savings_debts', subTab: 'debts' } }))}
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#FFF5F5] via-[#FFE3E3] to-[#FFC9C9] p-5 shadow-sm border-2 border-rose-300/60 flex flex-col justify-between min-h-[120px] group transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-pointer"
+        >
           <div className="absolute -right-2 -bottom-2 opacity-[0.06] transform group-hover:scale-110 transition-transform duration-300">
             <ArrowDownLeft className="w-24 h-24 text-rose-950" />
           </div>

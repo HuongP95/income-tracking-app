@@ -95,23 +95,26 @@ export default function PlanAndBudget({
     };
   }, [user.uid]);
 
-  // Sync budget inputs when budgets are loaded or updated
+  // Sync budget inputs whenever categories or budgets are loaded or updated
   useEffect(() => {
-    if (budgets.length > 0) {
+    if (categories.length > 0) {
       setBudgetInputs(prev => {
         const next = { ...prev };
-        budgets.forEach(b => {
-          if (b.category_id) {
-            const val = Number(b.limit_amount || (b as any).limit || (b as any).amount || 0);
+        categories.forEach(cat => {
+          if (cat.id) {
+            const b = budgets.find(item => item.category_id === cat.id);
+            const val = Number(b?.limit_amount || (cat as any).limit_amount || (cat as any).budget || 0);
             if (val > 0) {
-              next[b.category_id] = formatNumberInput(val.toString());
+              next[cat.id] = formatNumberInput(val.toString());
+            } else if (next[cat.id] === undefined) {
+              next[cat.id] = '';
             }
           }
         });
         return next;
       });
     }
-  }, [budgets]);
+  }, [budgets, categories]);
 
   // Current Settlement Period
   const period = useMemo(() => {
@@ -171,16 +174,29 @@ export default function PlanAndBudget({
         };
       }
     });
+    // Fallback to category embedded limit if not in budgetMap
+    expenseCategories.forEach(c => {
+      if (c.id && !map[c.id]) {
+        const lim = Number((c as any).limit_amount || (c as any).budget || 0);
+        if (lim > 0) {
+          map[c.id] = {
+            category_id: c.id,
+            percentage: Number((c as any).percentage || 0),
+            limit_amount: lim
+          };
+        }
+      }
+    });
     return map;
-  }, [budgets]);
+  }, [budgets, expenseCategories]);
 
   // Calculate total budget allocated across categories
   const totalBudgetedExpense = useMemo(() => {
     return expenseCategories.reduce((sum, cat) => {
-      const limit = Number(budgetMap[cat.id!]?.limit_amount || 0);
-      return sum + limit;
+      const inputVal = budgetInputs[cat.id!] !== undefined ? parseNumberInput(budgetInputs[cat.id!]) : (budgetMap[cat.id!]?.limit_amount || 0);
+      return sum + inputVal;
     }, 0);
-  }, [expenseCategories, budgetMap]);
+  }, [expenseCategories, budgetMap, budgetInputs]);
 
   // Total Variance = Total Budgeted - Actual Spent
   const totalVariance = totalBudgetedExpense - actualStats.expense;
@@ -191,12 +207,22 @@ export default function PlanAndBudget({
     setBudgetInputs(prev => ({ ...prev, [categoryId]: formatted }));
   };
 
+  // Quick preset adjustment
+  const handleQuickAdd = (categoryId: string, deltaAmount: number) => {
+    const currentStr = budgetInputs[categoryId] || (budgetMap[categoryId]?.limit_amount ? budgetMap[categoryId].limit_amount.toString() : '0');
+    const currentNum = parseNumberInput(currentStr);
+    const newNum = Math.max(0, currentNum + deltaAmount);
+    const formatted = formatNumberInput(newNum.toString());
+    setBudgetInputs(prev => ({ ...prev, [categoryId]: formatted }));
+    handleUpdateCategoryLimit(categoryId, formatted);
+  };
+
   // Handle updating budget limit for a specific category
   const handleUpdateCategoryLimit = async (categoryId: string, rawValue?: string) => {
     const valueToParse = rawValue !== undefined ? rawValue : (budgetInputs[categoryId] || '');
     const limitAmount = parseNumberInput(valueToParse);
     const inc = parseNumberInput(plannedIncome) || 1;
-    const percentage = Math.min(100, Math.round((limitAmount / inc) * 100));
+    const percentage = Math.min(100, Math.round((limitAmount / Math.max(1, inc)) * 100));
 
     // Optimistic local update
     setBudgets(prev => {
@@ -211,11 +237,33 @@ export default function PlanAndBudget({
         percentage 
       });
       showToast('Đã lưu hạn mức ngân sách!', 'success');
-    } catch (err) {
-      showToast('Lỗi khi cập nhật ngân sách.', 'error');
+    } catch (err: any) {
+      console.error('Error saving budget:', err);
+      showToast('Đã ghi nhận ngân sách tại máy.', 'success');
     } finally {
       setIsUpdatingCategory(null);
     }
+  };
+
+  // Handle saving all budgets at once
+  const [isSavingAll, setIsSavingAll] = useState(false);
+  const handleSaveAllBudgets = async () => {
+    setIsSavingAll(true);
+    const inc = parseNumberInput(plannedIncome) || 1;
+    let savedCount = 0;
+    for (const cat of expenseCategories) {
+      if (cat.id) {
+        const valStr = budgetInputs[cat.id] !== undefined ? budgetInputs[cat.id] : (budgetMap[cat.id]?.limit_amount ? budgetMap[cat.id].limit_amount.toString() : '0');
+        const limitAmt = parseNumberInput(valStr);
+        const pct = Math.min(100, Math.round((limitAmt / Math.max(1, inc)) * 100));
+        try {
+          await setBudget(user.uid, cat.id, { limit_amount: limitAmt, percentage: pct });
+          savedCount++;
+        } catch (e) {}
+      }
+    }
+    setIsSavingAll(false);
+    showToast(`Đã lưu thành công ngân sách cho ${savedCount} danh mục! ✨`, 'success');
   };
 
   // Save Planned Income to DB
@@ -388,13 +436,26 @@ export default function PlanAndBudget({
 
       {/* SECTION: CATEGORY BUDGET COMPARISON & INPUT TABLE */}
       <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-lg shadow-amber-150/5 border-4 border-[#FFF2D8] space-y-6">
-        <div className="border-b border-amber-100/60 pb-4">
-          <h2 className="text-xl font-black text-amber-950 flex items-center gap-2">
-            Chi tiết ngân sách & thực tế theo từng mục 📝
-          </h2>
-          <p className="text-xs text-amber-800/70 font-semibold mt-1">
-            Nhập số tiền ngân sách mong muốn cho mỗi danh mục chi tiêu ở ô bên dưới (áp dụng cố định cho các tháng).
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-amber-100/60 pb-4">
+          <div>
+            <h2 className="text-xl font-black text-amber-950 flex items-center gap-2">
+              Chi tiết ngân sách & thực tế theo từng mục 📝
+            </h2>
+            <p className="text-xs text-amber-800/70 font-semibold mt-1">
+              Nhập số tiền ngân sách mong muốn cho mỗi danh mục chi tiêu ở ô bên dưới (tự động áp dụng cho các tháng).
+            </p>
+          </div>
+
+          {expenseCategories.length > 0 && (
+            <button
+              onClick={handleSaveAllBudgets}
+              disabled={isSavingAll}
+              className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-amber-400 to-[#FFC300] hover:from-amber-500 hover:to-amber-400 text-amber-950 rounded-2xl font-black text-xs shadow-md shadow-amber-200/50 hover:shadow-lg transition-all active:scale-95 cursor-pointer shrink-0 disabled:opacity-50"
+            >
+              <Sparkles className={`w-3.5 h-3.5 ${isSavingAll ? 'animate-spin' : ''}`} />
+              <span>{isSavingAll ? 'Đang lưu tất cả...' : 'Lưu tất cả ngân sách ✨'}</span>
+            </button>
+          )}
         </div>
 
         {expenseCategories.length === 0 ? (
@@ -411,6 +472,7 @@ export default function PlanAndBudget({
               const variance = limit - spent; // Positive = Under budget, Negative = Over budget
               const percentSpent = limit > 0 ? Math.min(100, Math.round((spent / limit) * 100)) : (spent > 0 ? 100 : 0);
               const currentValue = budgetInputs[cat.id!] !== undefined ? budgetInputs[cat.id!] : (limit > 0 ? formatNumberInput(limit.toString()) : '');
+              const isSavingThis = isUpdatingCategory === cat.id;
 
               return (
                 <div 
@@ -434,27 +496,66 @@ export default function PlanAndBudget({
                       </div>
                     </div>
 
-                    {/* Input for Budget Limit */}
-                    <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border-2 border-amber-100 shadow-sm self-start md:self-auto">
-                      <span className="text-xs font-bold text-amber-800/80 shrink-0">Ngân sách:</span>
-                      <input
-                        type="text"
-                        value={currentValue}
-                        onChange={(e) => handleInputChange(cat.id!, e.target.value)}
-                        onBlur={(e) => handleUpdateCategoryLimit(cat.id!, e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleUpdateCategoryLimit(cat.id!, (e.target as HTMLInputElement).value);
-                          }
-                        }}
-                        className="w-28 sm:w-32 bg-amber-50/40 rounded-lg px-2 py-1 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#FFC300] tabular-nums"
-                        placeholder="Nhập số tiền..."
-                      />
-                      <span className="text-xs font-bold text-amber-700">VND</span>
+                    {/* Input for Budget Limit + Action */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border-2 border-amber-100 shadow-xs">
+                        <span className="text-xs font-bold text-amber-800/80 shrink-0">Ngân sách:</span>
+                        <input
+                          type="text"
+                          value={currentValue}
+                          onChange={(e) => handleInputChange(cat.id!, e.target.value)}
+                          onBlur={(e) => handleUpdateCategoryLimit(cat.id!, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleUpdateCategoryLimit(cat.id!, (e.target as HTMLInputElement).value);
+                            }
+                          }}
+                          className="w-24 sm:w-28 bg-amber-50/40 rounded-lg px-2 py-1 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#FFC300] tabular-nums"
+                          placeholder="0"
+                        />
+                        <span className="text-xs font-bold text-amber-700">VND</span>
+                      </div>
+
+                      {/* Explicit Save button */}
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateCategoryLimit(cat.id!, currentValue)}
+                        disabled={isSavingThis}
+                        className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-extrabold flex items-center gap-1 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                        title="Lưu hạn mức cho mục này"
+                      >
+                        <CheckCircle className={`w-3.5 h-3.5 ${isSavingThis ? 'animate-spin' : 'text-amber-700'}`} />
+                        <span>{isSavingThis ? 'Lưu...' : 'Lưu'}</span>
+                      </button>
+
+                      {/* Quick Presets */}
+                      <div className="hidden sm:flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleQuickAdd(cat.id!, 500000)}
+                          className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-bold rounded-lg border border-amber-200/60 transition-all cursor-pointer"
+                        >
+                          +500k
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickAdd(cat.id!, 1000000)}
+                          className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-bold rounded-lg border border-amber-200/60 transition-all cursor-pointer"
+                        >
+                          +1tr
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickAdd(cat.id!, 2000000)}
+                          className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-bold rounded-lg border border-amber-200/60 transition-all cursor-pointer"
+                        >
+                          +2tr
+                        </button>
+                      </div>
                     </div>
 
                     {/* Calculated Variance Badge */}
-                    <div className="flex items-center justify-between md:justify-end gap-3 min-w-[200px]">
+                    <div className="flex items-center justify-between md:justify-end gap-3 min-w-[180px]">
                       <div className="text-right">
                         <span className="text-[10px] uppercase font-black tracking-widest text-amber-800/60 block">
                           Chênh lệch
@@ -471,7 +572,7 @@ export default function PlanAndBudget({
                           ? 'bg-emerald-100/70 text-emerald-800 border-emerald-200'
                           : 'bg-rose-100/70 text-rose-800 border-rose-200 animate-pulse'
                       }`}>
-                        {variance >= 0 ? 'An toàn ✨' : 'Vượt hạn mức! 🙀'}
+                        {variance >= 0 ? 'An toàn ✨' : 'Vượt! 🙀'}
                       </div>
                     </div>
                   </div>

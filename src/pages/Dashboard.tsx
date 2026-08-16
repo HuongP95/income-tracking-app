@@ -7,7 +7,8 @@ import {
   subscribeToBudgets,
   subscribeToSettlementConfig,
   subscribeToCustomCycles,
-  subscribeToSavings
+  subscribeToSavings,
+  isExpenseCategory
 } from '../lib/db';
 import { Category, DebtInstallment, Transaction, Budget as BudgetType, CustomCycle, SavingTransaction } from '../types';
 import { 
@@ -199,7 +200,7 @@ export default function Dashboard({
       const limitAmt = Number(b.limit_amount) || 0;
       const spent = totals[b.category_id || ''] || 0;
       if (limitAmt > 0 && spent > limitAmt) {
-        const cat = categories.find(c => c.id === b.category_id);
+        const cat = categories.find(c => c.id === b.category_id && isExpenseCategory(c));
         if (cat) {
           overruns.push({
             categoryName: cat.name,

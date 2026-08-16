@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User } from 'firebase/auth';
-import { subscribeToTransactions, subscribeToCategories, subscribeToBudgets, setBudget, updateSettlementConfig } from '../lib/db';
+import { subscribeToTransactions, subscribeToCategories, subscribeToBudgets, setBudget, updateSettlementConfig, isExpenseCategory } from '../lib/db';
 import { Transaction, Category, Budget as BudgetType, CustomCycle } from '../types';
 import { isWithinInterval, format } from 'date-fns';
 import { Settings2, HelpCircle, CheckCircle, Info, Calendar, AlertTriangle, RefreshCw, Zap } from 'lucide-react';
@@ -62,7 +62,9 @@ export default function Budget({
     return transactions.filter(t => !t.is_split_pending && isWithinInterval(new Date(t.date), { start, end }));
   }, [transactions, period]);
 
-  const expenseCategories = categories.filter(c => c.type === 'expense');
+  const expenseCategories = useMemo(() => {
+    return categories.filter(c => isExpenseCategory(c));
+  }, [categories]);
 
   const budgetMap = useMemo(() => {
     return budgets.reduce((acc, b) => {

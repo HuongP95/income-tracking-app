@@ -1,16 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User } from 'firebase/auth';
 import { db } from '../firebase';
-import { ref, onValue, set } from 'firebase/database';
+import { ref, onValue, set, update } from 'firebase/database';
 import { 
   subscribeToTransactions, 
   subscribeToCategories, 
   subscribeToBudgets, 
+  subscribeToMonthlyPlan,
+  updateMonthlyPlan,
   setBudget, 
   updateSettlementConfig, 
   addCustomCycle, 
   deleteCustomCycle, 
-  addTransaction 
+  addTransaction,
+  isExpenseCategory
 } from '../lib/db';
 import { Transaction, Category, Budget as BudgetType, CustomCycle } from '../types';
 import { format as formatDate } from 'date-fns';
@@ -70,13 +73,11 @@ export default function PlanAndBudget({
       if (loadedT && loadedC && loadedB) setLoading(false);
     };
 
-    const planRef = ref(db, `monthly_plans/${user.uid}`);
-    const unsubPlan = onValue(planRef, (snapshot) => {
-      const data = snapshot.val();
+    const unsubPlan = subscribeToMonthlyPlan(user.uid, (data) => {
       if (data && data.planned_income !== undefined) {
         setPlannedIncome(formatNumberInput(data.planned_income.toString()));
       }
-    }, (err) => console.warn('Error reading plan:', err));
+    });
 
     const unsubTx = subscribeToTransactions(user.uid, (data) => { setTransactions(data); loadedT = true; checkLoaded(); });
     const unsubCat = subscribeToCategories(user.uid, (data) => { setCategories(data); loadedC = true; checkLoaded(); });
@@ -95,15 +96,20 @@ export default function PlanAndBudget({
     };
   }, [user.uid]);
 
+  // All expense categories (strictly excluding income categories and Đi chợ)
+  const expenseCategories = useMemo(() => {
+    return categories.filter(c => isExpenseCategory(c));
+  }, [categories]);
+
   // Sync budget inputs whenever categories or budgets are loaded or updated
   useEffect(() => {
-    if (categories.length > 0) {
+    if (expenseCategories.length > 0) {
       setBudgetInputs(prev => {
         const next = { ...prev };
-        categories.forEach(cat => {
+        expenseCategories.forEach(cat => {
           if (cat.id) {
             const b = budgets.find(item => item.category_id === cat.id);
-            const val = Number(b?.limit_amount || (cat as any).limit_amount || (cat as any).budget || 0);
+            const val = Number(b?.limit_amount !== undefined ? b.limit_amount : ((cat as any).limit_amount || (cat as any).budget || 0));
             if (val > 0) {
               next[cat.id] = formatNumberInput(val.toString());
             } else if (next[cat.id] === undefined) {
@@ -114,7 +120,7 @@ export default function PlanAndBudget({
         return next;
       });
     }
-  }, [budgets, categories]);
+  }, [budgets, expenseCategories]);
 
   // Current Settlement Period
   const period = useMemo(() => {
@@ -153,31 +159,25 @@ export default function PlanAndBudget({
     return { income, expense, net: income - expense };
   }, [monthTxs]);
 
-  // All expense categories (excluding Đi chợ)
-  const expenseCategories = useMemo(() => {
-    return categories.filter(c => {
-      const type = (c.type || 'expense').toLowerCase();
-      const name = (c.name || '').toLowerCase().trim();
-      return type === 'expense' && name !== 'đi chợ' && name !== 'di cho' && !name.includes('đi chợ');
-    });
-  }, [categories]);
-
-  // Map category budgets
+  // Map category budgets ONLY for genuine expense categories
   const budgetMap = useMemo(() => {
     const map: Record<string, BudgetType> = {};
+    const validExpenseIds = new Set(expenseCategories.map(c => c.id));
+
     budgets.forEach(b => {
-      if (b.category_id) {
+      if (b.category_id && validExpenseIds.has(b.category_id)) {
         map[b.category_id] = {
           category_id: b.category_id,
           percentage: Number(b.percentage) || 0,
-          limit_amount: Number(b.limit_amount || (b as any).limit || (b as any).amount || 0)
+          limit_amount: Number(b.limit_amount !== undefined ? b.limit_amount : ((b as any).limit || (b as any).amount || 0))
         };
       }
     });
+
     // Fallback to category embedded limit if not in budgetMap
     expenseCategories.forEach(c => {
       if (c.id && !map[c.id]) {
-        const lim = Number((c as any).limit_amount || (c as any).budget || 0);
+        const lim = Number((c as any).limit_amount !== undefined ? (c as any).limit_amount : ((c as any).budget || 0));
         if (lim > 0) {
           map[c.id] = {
             category_id: c.id,
@@ -190,10 +190,12 @@ export default function PlanAndBudget({
     return map;
   }, [budgets, expenseCategories]);
 
-  // Calculate total budget allocated across categories
+  // Calculate total budget allocated across expense categories
   const totalBudgetedExpense = useMemo(() => {
     return expenseCategories.reduce((sum, cat) => {
-      const inputVal = budgetInputs[cat.id!] !== undefined ? parseNumberInput(budgetInputs[cat.id!]) : (budgetMap[cat.id!]?.limit_amount || 0);
+      const inputVal = budgetInputs[cat.id!] !== undefined 
+        ? parseNumberInput(budgetInputs[cat.id!]) 
+        : (budgetMap[cat.id!]?.limit_amount || 0);
       return sum + inputVal;
     }, 0);
   }, [expenseCategories, budgetMap, budgetInputs]);
@@ -223,6 +225,9 @@ export default function PlanAndBudget({
     const limitAmount = parseNumberInput(valueToParse);
     const inc = parseNumberInput(plannedIncome) || 1;
     const percentage = Math.min(100, Math.round((limitAmount / Math.max(1, inc)) * 100));
+
+    const formatted = formatNumberInput(limitAmount.toString());
+    setBudgetInputs(prev => ({ ...prev, [categoryId]: formatted }));
 
     // Optimistic local update
     setBudgets(prev => {
@@ -271,8 +276,7 @@ export default function PlanAndBudget({
     setPlannedIncome(val);
     const num = parseNumberInput(val);
     try {
-      const planRef = ref(db, `monthly_plans/${user.uid}`);
-      await set(planRef, { planned_income: num });
+      await updateMonthlyPlan(user.uid, { planned_income: num });
       await updateSettlementConfig(user.uid, { estimated_income: num });
     } catch (err) {
       console.error(err);

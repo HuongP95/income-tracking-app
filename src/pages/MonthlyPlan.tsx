@@ -1,8 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User } from 'firebase/auth';
 import { db } from '../firebase';
-import { ref, onValue, set } from 'firebase/database';
-import { subscribeToTransactions, updateSettlementDay, subscribeToCategories, updateSettlementConfig, addCustomCycle, updateCustomCycle, deleteCustomCycle, addTransaction } from '../lib/db';
+import { ref, onValue, set, update } from 'firebase/database';
+import { 
+  subscribeToTransactions, 
+  updateSettlementDay, 
+  subscribeToCategories, 
+  subscribeToMonthlyPlan,
+  updateMonthlyPlan,
+  updateSettlementConfig, 
+  addCustomCycle, 
+  updateCustomCycle, 
+  deleteCustomCycle, 
+  addTransaction 
+} from '../lib/db';
 import { Transaction, Category, CustomCycle } from '../types';
 import { isWithinInterval, format } from 'date-fns';
 import { Target, TrendingDown, TrendingUp, AlertTriangle, CheckCircle, Info, RefreshCw, Calendar, Trash2, Plus, Sparkles } from 'lucide-react';
@@ -35,15 +46,13 @@ export default function MonthlyPlan({
 
   // Subscribe to monthly plan values from database
   useEffect(() => {
-    const planRef = ref(db, `monthly_plans/${user.uid}`);
-    const unsubPlan = onValue(planRef, (snapshot) => {
-      const data = snapshot.val();
+    const unsubPlan = subscribeToMonthlyPlan(user.uid, (data) => {
       if (data) {
         if (data.planned_income !== undefined) {
-          setPlannedIncome(formatNumberInput(data.planned_income));
+          setPlannedIncome(formatNumberInput(data.planned_income.toString()));
         }
         if (data.planned_expense !== undefined) {
-          setPlannedExpense(formatNumberInput(data.planned_expense));
+          setPlannedExpense(formatNumberInput(data.planned_expense.toString()));
         }
       }
     });
@@ -132,11 +141,9 @@ export default function MonthlyPlan({
     e.preventDefault();
     setIsSaving(true);
     try {
-      const planRef = ref(db, `monthly_plans/${user.uid}`);
-      await set(planRef, {
+      await updateMonthlyPlan(user.uid, {
         planned_income: rawPlannedIncome,
-        planned_expense: rawPlannedExpense,
-        updated_at: new Date().getTime()
+        planned_expense: rawPlannedExpense
       });
       setShowSaveSuccess(true);
       setTimeout(() => setShowSaveSuccess(false), 3000);

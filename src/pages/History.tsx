@@ -601,12 +601,12 @@ export default function History({ user }: { user: User }) {
                   setToDate(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
                 }}
                 className={`text-[10px] font-black px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
-                  fromDate === format(startOfMonth(new Date()), 'yyyy-MM-dd')
+                  fromDate === format(startOfMonth(new Date()), 'yyyy-MM-dd') && toDate === format(endOfMonth(new Date()), 'yyyy-MM-dd')
                     ? 'bg-amber-400 text-amber-950 border-amber-500 shadow-xs'
                     : 'bg-amber-50/70 text-amber-900 border-amber-200/80 hover:bg-amber-100'
                 }`}
               >
-                Tháng 8 / 2026 📅
+                {`Tháng ${format(new Date(), 'M/yyyy')} 📅`}
               </button>
               <button
                 type="button"
@@ -616,12 +616,12 @@ export default function History({ user }: { user: User }) {
                   setToDate(format(endOfMonth(prevM), 'yyyy-MM-dd'));
                 }}
                 className={`text-[10px] font-black px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
-                  fromDate === format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd')
+                  fromDate === format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd') && toDate === format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd')
                     ? 'bg-amber-400 text-amber-950 border-amber-500 shadow-xs'
                     : 'bg-amber-50/70 text-amber-900 border-amber-200/80 hover:bg-amber-100'
                 }`}
               >
-                Tháng 7 / 2026 ⏪
+                {`Tháng ${format(subMonths(new Date(), 1), 'M/yyyy')} ⏪`}
               </button>
               <button
                 type="button"

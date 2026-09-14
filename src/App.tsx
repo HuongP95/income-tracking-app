@@ -12,11 +12,13 @@ import History from './pages/History';
 import PlanAndBudget from './pages/PlanAndBudget';
 import SavingsAndDebts from './pages/SavingsAndDebts';
 import Reports from './pages/Reports';
-import { LayoutDashboard, Receipt, PiggyBank, PieChart, Target, LogOut, Sparkles, AlertCircle, TrendingUp, Compass } from 'lucide-react';
+import { LayoutDashboard, Receipt, PiggyBank, PieChart, Target, LogOut, Sparkles, AlertCircle, TrendingUp, Compass, Download } from 'lucide-react';
 import { cn } from './lib/utils';
 import { subscribeToSettlementConfig, subscribeToCustomCycles, subscribeToTransactions, subscribeToBudgets } from './lib/db';
 import { CustomCycle, Transaction, Budget as BudgetType } from './types';
 import { motion, AnimatePresence } from 'motion/react';
+import { PWAInstallButton } from './components/PWAInstallButton';
+import { OfflineIndicator } from './components/OfflineIndicator';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -263,6 +265,9 @@ export default function App() {
 
           {/* User Email & Logout Section */}
           <div className="hidden md:flex flex-col gap-2 pt-2 border-t border-amber-100">
+            <div className="px-1 py-2 flex justify-center">
+              <PWAInstallButton />
+            </div>
             {user.email && (
               <div className="px-3 py-2 bg-amber-50/80 rounded-xl border border-amber-200/60 flex items-center gap-2">
                 <div className="w-6 h-6 rounded-full bg-amber-300 flex items-center justify-center text-[10px] font-black text-amber-950 shrink-0">
@@ -295,9 +300,14 @@ export default function App() {
             </div>
             <span className="text-base font-black text-amber-950 tracking-tight flex items-center gap-1">Finly <span className="text-xs">🐾</span></span>
           </div>
-          <button onClick={() => signOut(auth)} className="text-amber-700/70 hover:text-rose-600 p-1 rounded-lg">
-            <LogOut className="w-5.5 h-5.5" />
-          </button>
+          <div className="flex items-center space-x-3">
+            <div className="md:hidden">
+              <PWAInstallButton />
+            </div>
+            <button onClick={() => signOut(auth)} className="text-amber-700/70 hover:text-rose-600 p-1 rounded-lg">
+              <LogOut className="w-5.5 h-5.5" />
+            </button>
+          </div>
         </header>
 
         {/* Content Wrapper */}
@@ -328,6 +338,7 @@ export default function App() {
           </AnimatePresence>
         </div>
       </main>
+      <OfflineIndicator />
     </div>
   );
 }

@@ -166,7 +166,7 @@ export default function Dashboard({
       }
     });
 
-    const adjustedBalance = cashStats.balance - totalSavingsBalance - outstandingDebts;
+    const adjustedBalance = cashStats.balance - totalSavingsBalance;
 
     return {
       outstandingLoans,

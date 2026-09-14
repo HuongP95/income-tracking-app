@@ -200,7 +200,7 @@ export default function DebtTracker({
       }
     });
 
-    const adjustedBalance = cashStats.balance - outstandingDebts;
+    const adjustedBalance = cashStats.balance;
 
     return {
       outstandingLoans,
